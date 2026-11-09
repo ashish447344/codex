@@ -22,6 +22,7 @@ use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_NAME;
+use codex_model_provider_info::XAI_PROVIDER_ID;
 use codex_model_provider_info::built_in_model_providers;
 use std::collections::BTreeSet;
 
@@ -93,7 +94,8 @@ impl ConfigManager {
             .flat_map(|table| table.keys().map(String::as_str))
             // Local OSS built-ins cannot have configured provider tables.
             .filter(|id| !matches!(*id, OLLAMA_OSS_PROVIDER_ID | LMSTUDIO_OSS_PROVIDER_ID))
-            .chain([OPENAI_PROVIDER_ID])
+            // Built-in cloud providers are selectable even without a config.toml entry.
+            .chain([OPENAI_PROVIDER_ID, XAI_PROVIDER_ID])
             .collect();
         let data = ids
             .into_iter()
@@ -155,7 +157,9 @@ pub(super) fn summarize_provider(
             credential_file: string_field(config, "credential_file"),
         },
         _ => {
-            let env_key = string_field(config, "env_key");
+            // A built-in provider can declare its environment credential without configuration.
+            let env_key = string_field(config, "env_key")
+                .or_else(|| builtin.and_then(|provider| provider.env_key.clone()));
             let auth = if external_auth {
                 GatewayAuth::ExternallyConfigured { env_key }
             } else if let Some(env_key) = env_key {

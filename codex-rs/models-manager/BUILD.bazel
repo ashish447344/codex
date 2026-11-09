@@ -5,6 +5,8 @@ codex_rust_crate(
     compile_data = [
         "models.json",
         "prompt.md",
+        # The xAI provider loads this static metadata at compile time.
+        "xai_models.json",
     ],
     crate_name = "codex_models_manager",
 )

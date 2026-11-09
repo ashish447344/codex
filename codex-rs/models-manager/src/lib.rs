@@ -20,6 +20,13 @@ pub fn bundled_models_response()
     serde_json::from_str(include_str!("../models.json"))
 }
 
+/// Load the static xAI catalog because the public xAI `/models` endpoint does not provide
+/// the Codex-specific metadata needed to configure model behavior.
+pub fn bundled_xai_models_response()
+-> std::result::Result<codex_protocol::openai_models::ModelsResponse, serde_json::Error> {
+    serde_json::from_str(include_str!("../xai_models.json"))
+}
+
 /// Convert the client version string to a whole version string (e.g. "1.2.3-alpha.4" -> "1.2.3").
 pub fn client_version_to_whole() -> String {
     format!(

@@ -1,0 +1,341 @@
+{
+  "models": [
+    {
+      "slug": "grok-4.7",
+      "display_name": "Grok 4.7",
+      "description": "xAI's frontier model for coding, agentic tasks, and knowledge work.",
+      "default_reasoning_level": "high",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Faster responses with lighter reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balances latency and reasoning depth"
+        },
+        {
+          "effort": "high",
+          "description": "Deeper reasoning for challenging tasks"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Maximum reasoning depth with higher latency"
+        }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 0,
+      "availability_nux": null,
+      "upgrade": null,
+      "model_messages": {
+        "instructions_template": "You are Codex, an agentic coding assistant. Collaborate with the user to complete their task."
+      },
+      "include_skills_usage_instructions": false,
+      "include_plugin_usage_instructions": false,
+      "include_apps_usage_instructions": false,
+      "supports_reasoning_summary_parameter": false,
+      "default_reasoning_summary": "none",
+      "support_verbosity": false,
+      "default_verbosity": null,
+      "apply_patch_tool_type": null,
+      "truncation_policy": {
+        "mode": "tokens",
+        "limit": 10000
+      },
+      "supports_image_detail_original": false,
+      "context_window": 500000,
+      "max_context_window": 500000,
+      "experimental_supported_tools": [],
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "supports_search_tool": false,
+      "supports_experimental_context": false,
+      "use_responses_lite": false,
+      "supports_reasoning_effort_updates": false,
+      "node_repl_auto_review_required": false,
+      "node_repl_disabled": false
+    },
+    {
+      "slug": "grok-4.6",
+      "display_name": "Grok 4.6",
+      "description": "xAI's frontier model for coding, agentic tasks, and knowledge work.",
+      "default_reasoning_level": "high",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Faster responses with lighter reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balances latency and reasoning depth"
+        },
+        {
+          "effort": "high",
+          "description": "Deeper reasoning for challenging tasks"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Maximum reasoning depth with higher latency"
+        }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 1,
+      "availability_nux": null,
+      "upgrade": null,
+      "model_messages": {
+        "instructions_template": "You are Codex, an agentic coding assistant. Collaborate with the user to complete their task."
+      },
+      "include_skills_usage_instructions": false,
+      "include_plugin_usage_instructions": false,
+      "include_apps_usage_instructions": false,
+      "supports_reasoning_summary_parameter": false,
+      "default_reasoning_summary": "none",
+      "support_verbosity": false,
+      "default_verbosity": null,
+      "apply_patch_tool_type": null,
+      "truncation_policy": {
+        "mode": "tokens",
+        "limit": 10000
+      },
+      "supports_image_detail_original": false,
+      "context_window": 500000,
+      "max_context_window": 500000,
+      "experimental_supported_tools": [],
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "supports_search_tool": false,
+      "supports_experimental_context": false,
+      "use_responses_lite": false,
+      "supports_reasoning_effort_updates": false,
+      "node_repl_auto_review_required": false,
+      "node_repl_disabled": false
+    },
+    {
+      "slug": "grok-4.5",
+      "display_name": "Grok 4.5",
+      "description": "xAI's coding model for agentic software and engineering workflows.",
+      "default_reasoning_level": "high",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Faster responses with lighter reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balances latency and reasoning depth"
+        },
+        {
+          "effort": "high",
+          "description": "Deeper reasoning for challenging tasks"
+        }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 2,
+      "availability_nux": null,
+      "upgrade": null,
+      "model_messages": {
+        "instructions_template": "You are Codex, an agentic coding assistant. Collaborate with the user to complete their task."
+      },
+      "include_skills_usage_instructions": false,
+      "include_plugin_usage_instructions": false,
+      "include_apps_usage_instructions": false,
+      "supports_reasoning_summary_parameter": false,
+      "default_reasoning_summary": "none",
+      "support_verbosity": false,
+      "default_verbosity": null,
+      "apply_patch_tool_type": null,
+      "truncation_policy": {
+        "mode": "tokens",
+        "limit": 10000
+      },
+      "supports_image_detail_original": false,
+      "context_window": 500000,
+      "max_context_window": 500000,
+      "experimental_supported_tools": [],
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "supports_search_tool": false,
+      "supports_experimental_context": false,
+      "use_responses_lite": false,
+      "supports_reasoning_effort_updates": false,
+      "node_repl_auto_review_required": false,
+      "node_repl_disabled": false
+    },
+    {
+      "slug": "grok-4.3",
+      "display_name": "Grok 4.3",
+      "description": "Fast, reliable xAI model with strong tool calling and instruction following.",
+      "default_reasoning_level": "low",
+      "supported_reasoning_levels": [
+        {
+          "effort": "none",
+          "description": "Disables reasoning for the lowest latency"
+        },
+        {
+          "effort": "low",
+          "description": "Faster responses with lighter reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balances latency and reasoning depth"
+        },
+        {
+          "effort": "high",
+          "description": "Deeper reasoning for challenging tasks"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Maximum reasoning depth with higher latency"
+        }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 3,
+      "availability_nux": null,
+      "upgrade": null,
+      "model_messages": {
+        "instructions_template": "You are Codex, an agentic coding assistant. Collaborate with the user to complete their task."
+      },
+      "include_skills_usage_instructions": false,
+      "include_plugin_usage_instructions": false,
+      "include_apps_usage_instructions": false,
+      "supports_reasoning_summary_parameter": false,
+      "default_reasoning_summary": "none",
+      "support_verbosity": false,
+      "default_verbosity": null,
+      "apply_patch_tool_type": null,
+      "truncation_policy": {
+        "mode": "tokens",
+        "limit": 10000
+      },
+      "supports_image_detail_original": false,
+      "context_window": 1000000,
+      "max_context_window": 1000000,
+      "experimental_supported_tools": [],
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "supports_search_tool": false,
+      "supports_experimental_context": false,
+      "use_responses_lite": false,
+      "supports_reasoning_effort_updates": false,
+      "node_repl_auto_review_required": false,
+      "node_repl_disabled": false
+    },
+    {
+      "slug": "grok-4.20-0309-reasoning",
+      "display_name": "Grok 4.20 Reasoning",
+      "description": "xAI's high-performance reasoning model with agentic tool calling.",
+      "default_reasoning_level": null,
+      "supported_reasoning_levels": [],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 4,
+      "availability_nux": null,
+      "upgrade": null,
+      "model_messages": {
+        "instructions_template": "You are Codex, an agentic coding assistant. Collaborate with the user to complete their task."
+      },
+      "include_skills_usage_instructions": false,
+      "include_plugin_usage_instructions": false,
+      "include_apps_usage_instructions": false,
+      "supports_reasoning_summary_parameter": false,
+      "default_reasoning_summary": "none",
+      "support_verbosity": false,
+      "default_verbosity": null,
+      "apply_patch_tool_type": null,
+      "truncation_policy": {
+        "mode": "tokens",
+        "limit": 10000
+      },
+      "supports_image_detail_original": false,
+      "context_window": 1000000,
+      "max_context_window": 1000000,
+      "experimental_supported_tools": [],
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "supports_search_tool": false,
+      "supports_experimental_context": false,
+      "use_responses_lite": false,
+      "supports_reasoning_effort_updates": false,
+      "node_repl_auto_review_required": false,
+      "node_repl_disabled": false
+    },
+    {
+      "slug": "grok-4.20-multi-agent",
+      "display_name": "Grok 4.20 Multi-agent",
+      "description": "xAI's multi-agent research model. Higher reasoning effort increases collaborating agents.",
+      "default_reasoning_level": "high",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Uses 4 collaborating agents"
+        },
+        {
+          "effort": "medium",
+          "description": "Uses 4 collaborating agents"
+        },
+        {
+          "effort": "high",
+          "description": "Uses 16 collaborating agents"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Uses 16 collaborating agents"
+        }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 5,
+      "availability_nux": null,
+      "upgrade": null,
+      "model_messages": {
+        "instructions_template": "You are Codex, an agentic coding assistant. Collaborate with the user to complete their task."
+      },
+      "include_skills_usage_instructions": false,
+      "include_plugin_usage_instructions": false,
+      "include_apps_usage_instructions": false,
+      "supports_reasoning_summary_parameter": false,
+      "default_reasoning_summary": "none",
+      "support_verbosity": false,
+      "default_verbosity": null,
+      "apply_patch_tool_type": null,
+      "truncation_policy": {
+        "mode": "tokens",
+        "limit": 10000
+      },
+      "supports_image_detail_original": false,
+      "context_window": 1000000,
+      "max_context_window": 1000000,
+      "experimental_supported_tools": [],
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "supports_search_tool": false,
+      "supports_experimental_context": false,
+      "use_responses_lite": false,
+      "supports_reasoning_effort_updates": false,
+      "node_repl_auto_review_required": false,
+      "node_repl_disabled": false
+    }
+  ]
+}

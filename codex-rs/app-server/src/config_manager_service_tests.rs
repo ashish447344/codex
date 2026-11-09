@@ -3553,6 +3553,10 @@ async fn model_provider_list_allows_user_overrides_of_system_defaults() -> Resul
                     "id": "team", "name": name,
                     "canEdit": can_edit, "baseUrl": "https://system.example.test/v1",
                     "settings": {"type": "customGateway", "auth": {"mode": auth_mode, "envKey": "SYSTEM_KEY"}},
+                },
+                {
+                    "id": "xai", "name": "xAI", "canEdit": false, "baseUrl": null,
+                    "settings": {"type": "customGateway", "auth": {"mode": "environmentVariable", "envKey": "XAI_API_KEY"}},
                 }
             ])
         );

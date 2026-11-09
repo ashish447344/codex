@@ -86,6 +86,8 @@ fn required_provider_definitions_are_validated_without_local_defaults() -> anyho
     for invalid in [
         "[model_providers.gateway]\nbase_url = 'https://example.test'",
         "[model_providers.openai]\nname = 'Reserved'",
+        // xAI is built in, so managed configuration selects it by ID instead of redefining it.
+        "[model_providers.xai]\nname = 'Reserved'",
         "[model_providers.gateway]\nname = 'Gateway'\n[model_providers.gateway.aws]\nregion = 'us-east-1'",
     ] {
         let requirements = toml::from_str(invalid)?;

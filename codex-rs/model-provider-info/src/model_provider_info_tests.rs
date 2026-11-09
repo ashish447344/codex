@@ -389,6 +389,19 @@ fn test_create_amazon_bedrock_provider() {
 }
 
 #[test]
+fn test_create_xai_provider() {
+    let provider = ModelProviderInfo::create_xai_provider();
+
+    assert_eq!(provider.name, XAI_PROVIDER_NAME);
+    assert_eq!(provider.base_url.as_deref(), Some(XAI_API_BASE_URL));
+    assert_eq!(provider.env_key.as_deref(), Some("XAI_API_KEY"));
+    assert!(provider.is_xai());
+    assert!(!provider.requires_openai_auth);
+    assert!(!provider.supports_websockets);
+    assert_eq!(provider.stream_idle_timeout_ms, Some(1_800_000));
+}
+
+#[test]
 fn test_create_amazon_bedrock_runtime_provider() {
     let mut expected = ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None);
     expected.name = "Amazon Bedrock Runtime".to_string();
@@ -486,6 +499,17 @@ fn test_built_in_model_providers_include_amazon_bedrock_endpoints() {
         .collect::<Vec<_>>(),
         vec![Some(true), Some(true)]
     );
+}
+
+#[test]
+fn test_built_in_model_providers_include_xai() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let xai = providers
+        .get(XAI_PROVIDER_ID)
+        .expect("xAI provider should be built in");
+
+    assert!(xai.is_xai());
+    assert_eq!(xai.base_url.as_deref(), Some(XAI_API_BASE_URL));
 }
 
 #[test]

@@ -14,10 +14,11 @@ const CLEARED_AUTH_ENV: &[(&str, Option<&str>)] = &[
     ("OPENAI_FEDERATION_RULE_ID", None),
     ("OPENAI_IDENTITY_TOKEN_FILE", None),
     ("OPENAI_WORKLOAD_IDENTITY_CONTEXT", None),
+    ("XAI_API_KEY", None),
 ];
 
 #[tokio::test]
-async fn list_without_provider_definitions_only_returns_openai() -> Result<()> {
+async fn list_without_provider_definitions_returns_built_in_cloud_providers() -> Result<()> {
     for (config, default_id, base_url) in [
         ("", "openai", None),
         ("model_provider = 'ollama'", "ollama", None),
@@ -46,8 +47,13 @@ async fn list_without_provider_definitions_only_returns_openai() -> Result<()> {
         assert_eq!(
             list,
             json!({
-                "data": [{"id":"openai", "name":"OpenAI", "canEdit":false,
-                    "baseUrl":base_url, "settings":{"type":"openai"}}],
+                "data": [
+                    {"id":"openai", "name":"OpenAI", "canEdit":false,
+                        "baseUrl":base_url, "settings":{"type":"openai"}},
+                    {"id":"xai", "name":"xAI", "canEdit":false,
+                        "baseUrl":null, "settings":{"type":"customGateway",
+                        "auth":{"mode":"environmentVariable", "envKey":"XAI_API_KEY"}}}
+                ],
                 "defaultProviderId":default_id, "canChangeDefault":true,
             })
         );
@@ -145,6 +151,10 @@ base_url = "https://managed.example.test"
                 {
                     "id":"team", "name":"Team Gateway", "canEdit":true,
                     "baseUrl":"https://gateway.example.test/v1", "settings":{"type":"customGateway", "auth":{"mode":"environmentVariable", "envKey":"TEAM_KEY"}},
+                },
+                {
+                    "id":"xai", "name":"xAI", "canEdit":false,
+                    "baseUrl":null, "settings":{"type":"customGateway", "auth":{"mode":"environmentVariable", "envKey":"XAI_API_KEY"}},
                 },
             ],
         })
