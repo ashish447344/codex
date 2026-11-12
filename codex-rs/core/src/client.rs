@@ -1009,6 +1009,17 @@ impl ModelClient {
                     ResponseItem::Compaction { .. } | ResponseItem::ContextCompaction { .. }
                 )
             });
+            // xAI types a reasoning item's `content` as a sequence. Codex serializes a
+            // missing value as `"content": null`, which xAI rejects with a misleading
+            // "Could not decode the compaction blob" 400. An empty list makes serde omit
+            // the key; the encrypted blob is untouched and saved history is unchanged.
+            for item in &mut input {
+                if let ResponseItem::Reasoning { content, .. } = item
+                    && content.is_none()
+                {
+                    *content = Some(Vec::new());
+                }
+            }
         }
         // These prompt-only items are rebuilt on every request. Hash their visible payloads
         // within the thread so retries and resumed sessions preserve their identity.

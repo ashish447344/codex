@@ -2502,13 +2502,68 @@ fn xai_responses_requests_omit_unsupported_tool_shapes() -> anyhow::Result<()> {
         /*include_internal*/ true,
     )?;
 
+    // The base-instructions message is always prepended, so look for the blob itself.
     assert!(
-        request.input.is_empty(),
+        !request.input.iter().any(|item| matches!(
+            item,
+            ResponseItem::Compaction { .. } | ResponseItem::ContextCompaction { .. }
+        )),
         "xAI requests must not replay compaction blobs from another provider"
     );
     assert_eq!(
         serde_json::to_value(request)?["tools"],
         serde_json::to_value(vec![ToolSpec::Function(function)])?
     );
+    Ok(())
+}
+
+#[test]
+fn xai_responses_requests_omit_null_reasoning_content() -> anyhow::Result<()> {
+    let mut client = test_model_client(SessionSource::Cli);
+    Arc::get_mut(&mut client.state)
+        .expect("test client should have unique session state")
+        .provider = create_model_provider(
+            ModelProviderInfo::create_xai_provider(),
+            /*auth_manager*/ None,
+        );
+    let prompt = Prompt {
+        input: vec![ResponseItem::Reasoning {
+            id: None,
+            summary: Vec::new(),
+            content: None,
+            encrypted_content: Some("xai-reasoning-blob".into()),
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        ..Default::default()
+    };
+
+    let request = client.build_responses_request(
+        &prompt,
+        &test_model_info(),
+        /*effort*/ None,
+        codex_protocol::config_types::ReasoningSummary::None,
+        /*service_tier*/ None,
+        &test_responses_metadata_for_client(
+            &client,
+            /*turn_id*/ None,
+            format!("{}:0", client.state.thread_id),
+            /*parent_thread_id*/ None,
+            TestCodexResponsesRequestKind::Turn,
+        ),
+        /*include_internal*/ true,
+    )?;
+
+    // xAI answers `"content": null` with "Could not decode the compaction blob". The
+    // request also carries the base-instructions message, so check the replayed item only.
+    let request = serde_json::to_value(request)?;
+    let input = request["input"]
+        .as_array()
+        .expect("request input should be an array");
+    let expected = json!({
+        "type": "reasoning",
+        "summary": [],
+        "encrypted_content": "xai-reasoning-blob",
+    });
+    assert_eq!(input.last(), Some(&expected));
     Ok(())
 }
