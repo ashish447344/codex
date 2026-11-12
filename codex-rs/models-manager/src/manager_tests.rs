@@ -1917,6 +1917,10 @@ fn bundled_xai_models_json_includes_documented_reasoning_metadata() {
         .expect("bundled xAI catalog should include grok-4.7");
 
     assert_eq!(grok_4_7.context_window, Some(500_000));
+    // xAI accepts flat function tools, while Code Mode emits unsupported namespace tools.
+    assert!(response.models.iter().all(|model| {
+        model.tool_mode == Some(codex_protocol::openai_models::ToolMode::Direct)
+    }));
     assert_eq!(
         grok_4_7
             .supported_reasoning_levels

@@ -24,6 +24,7 @@
         }
       ],
       "shell_type": "shell_command",
+      "tool_mode": "direct",
       "visibility": "list",
       "supported_in_api": true,
       "priority": 0,
@@ -83,6 +84,7 @@
         }
       ],
       "shell_type": "shell_command",
+      "tool_mode": "direct",
       "visibility": "list",
       "supported_in_api": true,
       "priority": 1,
@@ -138,6 +140,7 @@
         }
       ],
       "shell_type": "shell_command",
+      "tool_mode": "direct",
       "visibility": "list",
       "supported_in_api": true,
       "priority": 2,
@@ -201,6 +204,7 @@
         }
       ],
       "shell_type": "shell_command",
+      "tool_mode": "direct",
       "visibility": "list",
       "supported_in_api": true,
       "priority": 3,
@@ -243,6 +247,7 @@
       "default_reasoning_level": null,
       "supported_reasoning_levels": [],
       "shell_type": "shell_command",
+      "tool_mode": "direct",
       "visibility": "list",
       "supported_in_api": true,
       "priority": 4,
@@ -302,6 +307,7 @@
         }
       ],
       "shell_type": "shell_command",
+      "tool_mode": "direct",
       "visibility": "list",
       "supported_in_api": true,
       "priority": 5,
