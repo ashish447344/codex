@@ -2473,6 +2473,11 @@ fn xai_responses_requests_omit_unsupported_tool_shapes() -> anyhow::Result<()> {
         )],
     };
     let prompt = Prompt {
+        input: vec![ResponseItem::Compaction {
+            id: None,
+            encrypted_content: "foreign-compaction-blob".into(),
+            internal_chat_message_metadata_passthrough: None,
+        }],
         tools: vec![
             ToolSpec::Function(function.clone()),
             ToolSpec::Namespace(namespace),
@@ -2497,6 +2502,10 @@ fn xai_responses_requests_omit_unsupported_tool_shapes() -> anyhow::Result<()> {
         /*include_internal*/ true,
     )?;
 
+    assert!(
+        request.input.is_empty(),
+        "xAI requests must not replay compaction blobs from another provider"
+    );
     assert_eq!(
         serde_json::to_value(request)?["tools"],
         serde_json::to_value(vec![ToolSpec::Function(function)])?

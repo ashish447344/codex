@@ -998,6 +998,18 @@ impl ModelClient {
             });
         }
         let is_openai = self.state.provider.info().is_openai();
+        let is_xai = self.state.provider.info().is_xai();
+        if is_xai {
+            // xAI compaction blobs are opaque and valid only when returned by xAI's
+            // `/responses/compact` endpoint. This provider uses Codex's local compaction,
+            // whose plaintext summary remains in history, so never replay a foreign blob.
+            input.retain(|item| {
+                !matches!(
+                    item,
+                    ResponseItem::Compaction { .. } | ResponseItem::ContextCompaction { .. }
+                )
+            });
+        }
         // These prompt-only items are rebuilt on every request. Hash their visible payloads
         // within the thread so retries and resumed sessions preserve their identity.
         let prefix_namespace = Uuid::new_v5(
@@ -1007,12 +1019,7 @@ impl ModelClient {
         let mut prefix = Vec::new();
         // xAI rejects namespace and custom tools even when Code Mode is disabled.
         // Filter only the outgoing representation; the local tool registry still owns dispatch.
-        let xai_tools = self
-            .state
-            .provider
-            .info()
-            .is_xai()
-            .then(|| xai_compatible_tools(&prompt.tools));
+        let xai_tools = is_xai.then(|| xai_compatible_tools(&prompt.tools));
         let request_tools = xai_tools.as_deref().unwrap_or(&prompt.tools);
         let tools = if model_info.use_responses_lite {
             if !request_tools.is_empty() {
