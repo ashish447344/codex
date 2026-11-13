@@ -2,8 +2,8 @@
 
 ## Is the Python SDK stable?
 
-`openai-codex` publishes stable releases. Install the latest one with
-`pip install openai-codex`.
+`circle-codex` publishes stable releases. Install the latest one with
+`pip install circle-codex`.
 
 ## Why does the SDK install a runtime package?
 
@@ -143,7 +143,7 @@ This avoids duplicate ways to do the same operation and keeps behavior explicit.
 
 Common causes:
 
-- installation is incomplete and the pinned `openai-codex-cli-bin` dependency is missing
+- installation is incomplete and the pinned `circle-codex-cli-bin` dependency is missing
 - local `codex_bin` override points to a missing file
 - a custom local Codex executable does not support the SDK operation being used
 

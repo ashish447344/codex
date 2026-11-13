@@ -1,0 +1,454 @@
+name: circle-python-release
+
+# Builds this fork's Codex CLI for macOS and Linux, packs it into
+# circle-codex-cli-bin wheels, builds the circle-codex SDK, and (optionally)
+# publishes both to PyPI.
+#
+# How to use: Actions tab -> circle-python-release -> Run workflow.
+#   version: the release version for both packages, for example 0.154.0
+#   publish: leave unchecked for a build-only dry run; check it to upload to PyPI
+#
+# One-time setup before the first publish:
+#   1. Create a GitHub environment named "pypi" in this repository.
+#   2. On PyPI, add a trusted (pending) publisher for BOTH circle-codex and
+#      circle-codex-cli-bin: this repository, workflow circle-python-release.yml,
+#      environment pypi.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version for both packages, for example 0.154.0 (must be 0.151.0 or newer)."
+        required: true
+        type: string
+      publish:
+        description: "Upload to PyPI after building. Leave unchecked for a build-only dry run."
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: circle-python-release-${{ inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CODEX_REPO_ROOT: ${{ github.workspace }}
+  RELEASE_VERSION: ${{ inputs.version }}
+  RUNTIME_DISTRIBUTION: circle-codex-cli-bin
+  SDK_DISTRIBUTION: circle-codex
+
+jobs:
+  validate:
+    name: validate version
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Validate release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          version = os.environ["RELEASE_VERSION"]
+          if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version) is None:
+              sys.exit(f"Version must look like 0.154.0; got {version!r}.")
+
+          # The SDK refuses runtimes older than this, so the release must not be older either.
+          source = Path("sdk/python/src/openai_codex/_runtime_requirements.py").read_text()
+          match = re.search(r'^MINIMUM_RUNTIME_VERSION = "([0-9]+\.[0-9]+\.[0-9]+)"$', source, re.MULTILINE)
+          if match is None:
+              sys.exit("Could not read MINIMUM_RUNTIME_VERSION from the SDK.")
+          minimum = match.group(1)
+
+          def parts(value: str) -> tuple[int, ...]:
+              return tuple(int(part) for part in value.split("."))
+
+          if parts(version) < parts(minimum):
+              sys.exit(f"Version {version} is older than the SDK minimum runtime {minimum}.")
+          print(f"Releasing {version} (SDK minimum runtime is {minimum}).")
+          PY
+
+  build-runtime:
+    name: runtime - ${{ matrix.target }}
+    needs: validate
+    runs-on: ${{ matrix.runner }}
+    # Standard GitHub-hosted runners are much smaller than upstream's release machines.
+    timeout-minutes: 300
+    defaults:
+      run:
+        shell: bash
+    env:
+      TARGET: ${{ matrix.target }}
+      # The git CLI reliably fetches nested native-library submodules on macOS.
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+      # Debug info is stripped from the packaged binaries anyway. Skipping it keeps
+      # the build inside the disk and time budget of standard runners.
+      CARGO_PROFILE_RELEASE_DEBUG: "0"
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-15
+            platform_tags: macosx_11_0_arm64
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+            platform_tags: macosx_10_9_x86_64
+          # The Linux binaries are static (musl), so each one is published twice:
+          # for glibc distros (manylinux) and for musl distros such as Alpine.
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+            platform_tags: manylinux_2_17_x86_64 musllinux_1_1_x86_64
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+            platform_tags: manylinux_2_17_aarch64 musllinux_1_1_aarch64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Free disk space (Linux)
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      # The release scripts need Python 3.11+ (tomllib); macOS runners may default to an older one.
+      - name: Setup Python (macOS)
+        if: ${{ runner.os == 'macOS' }}
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      # The repository keeps version 0.0.0 for local development builds. Release
+      # builds get their real version here so `codex --version` reports it.
+      - name: Stamp release version into the Rust workspace
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path("codex-rs/Cargo.toml")
+          text, count = re.subn(
+              r'(?m)^(\[workspace\.package\]\nversion = ")[^"]+(")',
+              lambda match: f"{match.group(1)}{os.environ['RELEASE_VERSION']}{match.group(2)}",
+              path.read_text(),
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("Could not find [workspace.package] version in codex-rs/Cargo.toml")
+          path.write_text(text)
+          PY
+          grep -n -A1 '^\[workspace.package\]' codex-rs/Cargo.toml
+
+      - name: Install Linux bwrap build dependencies
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends binutils pkg-config libcap-dev
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: ${{ matrix.target }}
+
+      # The Linux steps below mirror the `build` job of rust-release.yml.
+      - name: Use hermetic Cargo home (musl)
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          set -euo pipefail
+          cargo_home="${GITHUB_WORKSPACE}/.cargo-home"
+          mkdir -p "${cargo_home}/bin"
+          echo "CARGO_HOME=${cargo_home}" >> "$GITHUB_ENV"
+          echo "${cargo_home}/bin" >> "$GITHUB_PATH"
+          : > "${cargo_home}/config.toml"
+
+      - name: Install Zig
+        if: ${{ runner.os == 'Linux' }}
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.14.0
+          use-cache: false
+
+      - name: Install musl build tools
+        if: ${{ runner.os == 'Linux' }}
+        run: bash "${GITHUB_WORKSPACE}/.github/scripts/install-musl-build-tools.sh"
+
+      - name: Disable aws-lc jitter entropy (musl)
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          set -euo pipefail
+          # Avoid problematic aws-lc jitter entropy code path on musl builders.
+          echo "AWS_LC_SYS_NO_JITTER_ENTROPY=1" >> "$GITHUB_ENV"
+          target_no_jitter="AWS_LC_SYS_NO_JITTER_ENTROPY_${TARGET}"
+          target_no_jitter="${target_no_jitter//-/_}"
+          echo "${target_no_jitter}=1" >> "$GITHUB_ENV"
+
+      - name: Configure rusty_v8 artifact overrides and verify checksums
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Build bwrap and export digest
+        if: ${{ runner.os == 'Linux' }}
+        working-directory: codex-rs
+        run: |
+          set -euo pipefail
+          cargo build --target "$TARGET" --release --bin bwrap
+
+          bwrap_path="target/${TARGET}/release/bwrap"
+          if [[ ! -f "$bwrap_path" ]]; then
+            echo "bwrap binary ${bwrap_path} not found"
+            exit 1
+          fi
+
+          # Codex embeds this digest at build time and verifies the bundled
+          # bwrap resource before use. Strip bwrap before hashing so the digest
+          # covers the exact bytes that the release packages.
+          strip --strip-debug --strip-unneeded "$bwrap_path"
+          digest="$(sha256sum "$bwrap_path" | awk '{print $1}')"
+          echo "CODEX_BWRAP_SHA256=${digest}" >> "$GITHUB_ENV"
+          echo "Built bwrap ${bwrap_path} with sha256:${digest}"
+
+      - name: Build release binaries
+        working-directory: codex-rs
+        run: |
+          set -euo pipefail
+          STABLE_GIT_COMMIT="$(git rev-parse HEAD)"
+          export STABLE_GIT_COMMIT
+          cargo build --target "$TARGET" --release \
+            --bin codex --bin codex-code-mode-host --bin codex-exec-server
+
+      # Lays out bin/codex, its helper binaries, rg and (on Linux) bwrap the way
+      # the SDK runtime package expects, and strips the packaged copies.
+      - name: Assemble Codex package
+        run: |
+          set -euo pipefail
+          release_dir="codex-rs/target/${TARGET}/release"
+          package_dir="${RUNNER_TEMP}/codex-package-${TARGET}"
+          args=(
+            scripts/build_codex_package.py
+            --target "$TARGET"
+            --variant codex
+            --package-version "$RELEASE_VERSION"
+            --cargo-profile release
+            --entrypoint-bin "${release_dir}/codex"
+            --code-mode-host-bin "${release_dir}/codex-code-mode-host"
+            --exec-server-bin "${release_dir}/codex-exec-server"
+            --strip all
+            --package-dir "$package_dir"
+            --force
+          )
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            args+=(--bwrap-bin "${release_dir}/bwrap")
+          fi
+          python3 "${args[@]}"
+          echo "PACKAGE_DIR=${package_dir}" >> "$GITHUB_ENV"
+          find "$package_dir" -type f -exec ls -lh {} +
+
+      - name: Set up Python release tools
+        uses: ./.github/actions/setup-python-release-tools
+        with:
+          group: runtime
+
+      - name: Build runtime wheels
+        env:
+          PLATFORM_TAGS: ${{ matrix.platform_tags }}
+        run: |
+          set -euo pipefail
+          wheel_dir="${GITHUB_WORKSPACE}/dist/runtime"
+          mkdir -p "$wheel_dir"
+          for platform_tag in $PLATFORM_TAGS; do
+            stage_dir="${RUNNER_TEMP}/${RUNTIME_DISTRIBUTION}-${platform_tag}"
+            python3 sdk/python/scripts/update_sdk_artifacts.py \
+              stage-runtime \
+              "$stage_dir" \
+              "$PACKAGE_DIR" \
+              --codex-version "$RELEASE_VERSION" \
+              --platform-tag "$platform_tag"
+            uv build --offline --no-build-isolation --no-create-gitignore \
+              --python "${RUNNER_TEMP}/python-runtime-build-venv" \
+              --wheel \
+              --out-dir "$wheel_dir" \
+              "$stage_dir"
+          done
+          ls -lh "$wheel_dir"
+
+      - name: Check wheel size and smoke-test the bundled binary
+        run: |
+          set -euo pipefail
+          # PyPI rejects files above 100 MB unless the project has a raised limit.
+          for wheel in dist/runtime/*.whl; do
+            size="$(wc -c < "$wheel")"
+            if (( size > 100 * 1024 * 1024 )); then
+              echo "${wheel} is ${size} bytes, above PyPI's 100 MB default limit."
+              exit 1
+            fi
+          done
+
+          # Install the first wheel (the manylinux one on Linux) and run the binary.
+          wheel="$(ls dist/runtime/*.whl | head -n 1)"
+          smoke_venv="${RUNNER_TEMP}/runtime-smoke-venv"
+          uv venv --python "${RUNNER_TEMP}/python-runtime-build-venv/bin/python" "$smoke_venv"
+          uv pip install --python "${smoke_venv}/bin/python" "$wheel"
+          "${smoke_venv}/bin/python" - <<'PY'
+          import os
+          import subprocess
+
+          from codex_cli_bin import bundled_codex_path
+
+          output = subprocess.run(
+              [str(bundled_codex_path()), "--version"],
+              check=True,
+              capture_output=True,
+              text=True,
+          ).stdout.strip()
+          print(output)
+          if os.environ["RELEASE_VERSION"] not in output:
+              raise SystemExit(f"Expected version {os.environ['RELEASE_VERSION']} in {output!r}")
+          PY
+
+      - name: Upload runtime wheels
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: runtime-wheels-${{ matrix.target }}
+          path: dist/runtime/*.whl
+          if-no-files-found: error
+
+  build-sdk:
+    name: sdk
+    needs: validate
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up Python release tools
+        uses: ./.github/actions/setup-python-release-tools
+        with:
+          group: sdk
+
+      # Pins the SDK to exactly the runtime version built by this run.
+      - name: Build Python SDK package
+        run: |
+          set -euo pipefail
+          build_python="${RUNNER_TEMP}/python-sdk-build-venv/bin/python"
+          stage_dir="${RUNNER_TEMP}/${SDK_DISTRIBUTION}"
+          "$build_python" sdk/python/scripts/update_sdk_artifacts.py \
+            stage-sdk "$stage_dir" \
+            --sdk-version "$RELEASE_VERSION" \
+            --codex-version "$RELEASE_VERSION"
+          uv build --offline --no-build-isolation --no-create-gitignore \
+            --force-pep517 --python "$build_python" \
+            --wheel \
+            --sdist \
+            --out-dir dist/sdk \
+            "$stage_dir"
+          "$build_python" -m twine check --strict dist/sdk/*
+          ls -lh dist/sdk
+
+      - name: Upload Python SDK package
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: sdk-dist
+          path: dist/sdk/*
+          if-no-files-found: error
+
+  # Publishing stays in this top-level workflow: PyPI does not accept reusable
+  # workflows as trusted publishers. The runtime goes first because the SDK
+  # depends on that exact runtime version.
+  publish:
+    name: publish to PyPI
+    if: ${{ inputs.publish }}
+    needs:
+      - build-runtime
+      - build-sdk
+    runs-on: ubuntu-24.04
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write # Required for PyPI trusted publishing.
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Download runtime wheels
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: runtime-wheels-*
+          merge-multiple: true
+          path: dist/runtime
+
+      - name: Download Python SDK package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: sdk-dist
+          path: dist/sdk
+
+      - name: Check that the release is complete
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          wheels=(dist/runtime/*.whl)
+          if [[ "${#wheels[@]}" -ne 6 ]]; then
+            echo "Expected 6 runtime wheels, found ${#wheels[@]}."
+            exit 1
+          fi
+          sdk_files=(dist/sdk/*)
+          if [[ "${#sdk_files[@]}" -ne 2 ]]; then
+            echo "Expected an SDK wheel and sdist, found ${#sdk_files[@]} files."
+            exit 1
+          fi
+          ls -lh dist/runtime dist/sdk
+
+      - name: Publish runtime wheels to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist/runtime
+          skip-existing: true
+
+      - name: Wait for the runtime wheels on PyPI
+        run: python3 .github/scripts/circle_wait_for_pypi.py "$RUNTIME_DISTRIBUTION" "$RELEASE_VERSION" dist/runtime
+
+      - name: Publish Python SDK to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist/sdk
+          skip-existing: true
+
+      - name: Wait for the Python SDK on PyPI
+        run: python3 .github/scripts/circle_wait_for_pypi.py "$SDK_DISTRIBUTION" "$RELEASE_VERSION" dist/sdk

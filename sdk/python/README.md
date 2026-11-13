@@ -1,4 +1,11 @@
-# OpenAI Codex Python SDK
+# circle-codex
+
+Unofficial fork of the OpenAI Codex Python SDK. It bundles a Codex CLI build
+that adds a built-in xAI (Grok) model provider.
+
+This project is not affiliated with, endorsed by, or supported by OpenAI or
+xAI. It is built from <https://github.com/ashish447344/codex>, a fork of
+<https://github.com/openai/codex>.
 
 Build Python applications that start Codex threads, run turns, stream progress,
 and control workspace access.
@@ -8,7 +15,31 @@ and control workspace access.
 Install the SDK:
 
 ```bash
-pip install openai-codex
+pip install circle-codex
+```
+
+Prebuilt runtime wheels (`circle-codex-cli-bin`) are published for macOS
+(Apple silicon and Intel) and Linux (x86_64 and aarch64, glibc and musl).
+Windows is not supported.
+
+The import package keeps the upstream name `openai_codex`, so do not install
+this package into the same environment as the official `openai-codex`.
+
+## Quickstart with xAI
+
+Set `XAI_API_KEY` in your environment, then select the xAI provider:
+
+```python
+from openai_codex import Codex, CodexConfig, Sandbox
+
+config = CodexConfig(
+    config_overrides=('model_provider="xai"', 'model="grok-4.7"'),
+)
+
+with Codex(config) as codex:
+    thread = codex.thread_start(sandbox=Sandbox.workspace_write)
+    result = thread.run("Explain this repository in three bullets.")
+    print(result.final_response)
 ```
 
 ## Quickstart
@@ -65,11 +96,17 @@ Use Python's standard `help(openai_codex)`, `help(Codex)`, or
 
 ## Documentation
 
+The SDK API is the same as upstream, so the upstream guides apply:
+
 - [Getting started](https://github.com/openai/codex/blob/main/sdk/python/docs/getting-started.md)
 - [API reference](https://github.com/openai/codex/blob/main/sdk/python/docs/api-reference.md)
 - [Untrusted external messages](https://github.com/openai/codex/blob/main/sdk/python/docs/api-reference.md#externalmessage)
 - [FAQ](https://github.com/openai/codex/blob/main/sdk/python/docs/faq.md)
 - [Examples](https://github.com/openai/codex/blob/main/sdk/python/examples/README.md)
 
+Where those guides say `pip install openai-codex`, use `pip install circle-codex`.
+
 The package is licensed under the
-[repository Apache License 2.0](https://github.com/openai/codex/blob/main/LICENSE).
+[Apache License 2.0](https://github.com/ashish447344/codex/blob/main/LICENSE),
+the same license as upstream. See the repository
+[NOTICE](https://github.com/ashish447344/codex/blob/main/NOTICE) for attribution.

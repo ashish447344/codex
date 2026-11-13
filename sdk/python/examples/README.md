@@ -23,10 +23,10 @@ authorization or approval; example 16 establishes the user's task first.
 Install the published SDK:
 
 ```bash
-python -m pip install openai-codex
+python -m pip install circle-codex
 ```
 
-The SDK installs its pinned `openai-codex-cli-bin` runtime dependency.
+The SDK installs its pinned `circle-codex-cli-bin` runtime dependency.
 The pinned runtime version comes from the SDK package dependency.
 
 ## Run From A Checkout

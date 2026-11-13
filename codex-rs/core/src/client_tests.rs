@@ -2556,6 +2556,8 @@ fn xai_responses_requests_omit_null_reasoning_content() -> anyhow::Result<()> {
     // xAI answers `"content": null` with "Could not decode the compaction blob". The
     // request also carries the base-instructions message, so check the replayed item only.
     let request = serde_json::to_value(request)?;
+    // xAI requests opt in to server-side storage.
+    assert_eq!(request["store"], json!(true));
     let input = request["input"]
         .as_array()
         .expect("request input should be an array");

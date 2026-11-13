@@ -621,12 +621,12 @@ def test_runtime_distribution_name_is_consistent() -> None:
     runtime_setup = _load_runtime_setup_module()
     from openai_codex import _version, client as client_module
 
-    assert script.SDK_DISTRIBUTION_NAME == "openai-codex"
-    assert runtime_setup.SDK_PACKAGE_NAME == "openai-codex"
-    assert _version.DISTRIBUTION_NAME == "openai-codex"
-    assert script.RUNTIME_DISTRIBUTION_NAME == "openai-codex-cli-bin"
-    assert runtime_setup.PACKAGE_NAME == "openai-codex-cli-bin"
-    assert client_module.RUNTIME_PKG_NAME == "openai-codex-cli-bin"
+    assert script.SDK_DISTRIBUTION_NAME == "circle-codex"
+    assert runtime_setup.SDK_PACKAGE_NAME == "circle-codex"
+    assert _version.DISTRIBUTION_NAME == "circle-codex"
+    assert script.RUNTIME_DISTRIBUTION_NAME == "circle-codex-cli-bin"
+    assert runtime_setup.PACKAGE_NAME == "circle-codex-cli-bin"
+    assert client_module.RUNTIME_PKG_NAME == "circle-codex-cli-bin"
     assert (
         "importlib.metadata.version('codex-cli-bin')"
         not in (ROOT / "_runtime_setup.py").read_text()
@@ -644,13 +644,13 @@ def test_source_sdk_package_declares_stable_documentation() -> None:
         in pyproject["project"]["classifiers"],
         "license": pyproject["project"]["license"],
         "documentation": pyproject["project"]["urls"]["Documentation"],
-        "readme_is_stable": "# OpenAI Codex Python SDK\n" in readme,
+        "readme_is_stable": "# circle-codex\n" in readme,
         "local_license_file": (ROOT / "LICENSE").exists(),
     } == {
-        "description": "Python SDK for Codex",
+        "description": "Unofficial Codex Python SDK fork with a built-in xAI provider",
         "is_stable": True,
         "license": "Apache-2.0",
-        "documentation": "https://github.com/openai/codex/tree/main/sdk/python/docs",
+        "documentation": "https://github.com/ashish447344/codex/tree/main/sdk/python/docs",
         "readme_is_stable": True,
         "local_license_file": False,
     }
@@ -700,9 +700,9 @@ def test_runtime_setup_reads_independent_runtime_pin_and_release_tags() -> None:
         "release_tag": runtime_setup._release_tag("0.116.0a1"),
         "alpha_hotfix_release_tag": runtime_setup._release_tag("0.116.0a1.post2"),
     } == {
-        "package_name": "openai-codex-cli-bin",
+        "package_name": "circle-codex-cli-bin",
         "sdk_template_version": "0.0.0-dev",
-        "runtime_pin": "0.153.4",
+        "runtime_pin": "0.154.0",
         "normalized_release_version": "0.116.0a1",
         "normalized_alpha_hotfix_version": "0.116.0a1.post2",
         "release_tag": "rust-v0.116.0-alpha.1",
@@ -776,7 +776,7 @@ def test_runtime_package_is_wheel_only_and_builds_platform_specific_wheels() -> 
         elif isinstance(node.value, ast.JoinedStr):
             build_data_assignments[node.targets[0].slice.value] = "joined-string"
 
-    assert pyproject["project"]["name"] == "openai-codex-cli-bin"
+    assert pyproject["project"]["name"] == "circle-codex-cli-bin"
     assert pyproject["tool"]["hatch"]["build"]["targets"]["wheel"] == {
         "packages": ["src/codex_cli_bin"],
         "include": [
@@ -824,7 +824,7 @@ def test_stage_runtime_release_copies_package_layout_and_sets_version(
         "bwrap": "fake bwrap\n",
         "rg": "fake rg\n",
     }
-    assert 'name = "openai-codex-cli-bin"' in (staged / "pyproject.toml").read_text()
+    assert 'name = "circle-codex-cli-bin"' in (staged / "pyproject.toml").read_text()
     assert 'version = "1.2.3"' in (staged / "pyproject.toml").read_text()
 
 
@@ -1034,7 +1034,7 @@ def sdk_release_source(tmp_path: Path) -> Path:
     project = source / "pyproject.toml"
     project.write_text(
         re.sub(
-            r"openai-codex-cli-bin==[^\"\s]+", "openai-codex-cli-bin==0.153.0", project.read_text()
+            r"circle-codex-cli-bin==[^\"\s]+", "circle-codex-cli-bin==0.153.0", project.read_text()
         )
     )
     return source
@@ -1069,7 +1069,7 @@ def test_stage_sdk_release_packages_reviewed_artifacts(
         "version": pyproject["project"]["version"],
         "dependencies": pyproject["project"]["dependencies"],
     } == {
-        "name": "openai-codex",
+        "name": "circle-codex",
         "version": "0.153.0",
         "dependencies": source_project["project"]["dependencies"],
     }
@@ -1101,8 +1101,8 @@ def test_built_sdk_uses_explicit_release_versions(
     source_project = project_path.read_bytes()
     expected_dependencies = {
         *tomllib.loads(source_project.decode())["project"]["dependencies"],
-        "openai-codex-cli-bin==0.154.0",
-    } - {f"openai-codex-cli-bin=={source_runtime}"}
+        "circle-codex-cli-bin==0.154.0",
+    } - {f"circle-codex-cli-bin=={source_runtime}"}
     reviewed_files = {
         path: (sdk_release_source / path).read_bytes()
         for path in (
@@ -1128,7 +1128,7 @@ def test_built_sdk_uses_explicit_release_versions(
             path: wheel.read(path.removeprefix("src/")) for path in reviewed_files
         } == reviewed_files
     with tarfile.open(next(dist.glob("*.tar.gz"))) as sdist:
-        prefix = f"openai_codex-{sdk_version}/"
+        prefix = f"circle_codex-{sdk_version}/"
         metadata.append(sdist.extractfile(prefix + "PKG-INFO").read())
         assert {
             path: sdist.extractfile(prefix + path).read() for path in reviewed_files
@@ -1140,7 +1140,7 @@ def test_built_sdk_uses_explicit_release_versions(
             "version": package["Version"],
             "dependencies": set(package.get_all("Requires-Dist")),
         } == {
-            "name": "openai-codex",
+            "name": "circle-codex",
             "version": sdk_version,
             "dependencies": expected_dependencies,
         }
@@ -1196,7 +1196,7 @@ def test_sdk_release_matches_stable_runtime(
         "sdk_dependencies": [
             "pydantic>=2.12",
             "packaging>=26.2",
-            "openai-codex-cli-bin==0.153.0",
+            "circle-codex-cli-bin==0.153.0",
         ],
     }
 
@@ -1237,7 +1237,7 @@ def test_sdk_beta_can_use_a_supported_runtime(
     project = tomllib.loads((staged / "pyproject.toml").read_text())["project"]
     assert (project["version"], project["dependencies"]) == (
         "0.1.0b1",
-        ["pydantic>=2.12", "packaging>=26.2", "openai-codex-cli-bin==0.153.0"],
+        ["pydantic>=2.12", "packaging>=26.2", "circle-codex-cli-bin==0.153.0"],
     )
 
 
@@ -1403,7 +1403,7 @@ def test_release_version_cli_rejects_unsupported_runtime_releases(
     assert not github_output.exists()
 
 
-@pytest.mark.parametrize("runtime_dependency", ["", ', "openai-codex-cli-bin==1.2.3"' * 2])
+@pytest.mark.parametrize("runtime_dependency", ["", ', "circle-codex-cli-bin==1.2.3"' * 2])
 def test_stage_sdk_release_rejects_missing_or_duplicate_runtime_pin(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1413,11 +1413,11 @@ def test_stage_sdk_release_rejects_missing_or_duplicate_runtime_pin(
     template = tmp_path / "template"
     template.mkdir()
     (template / "pyproject.toml").write_text(
-        '[project]\nname = "openai-codex"\nversion = "0.0.0"\n'
+        '[project]\nname = "circle-codex"\nversion = "0.0.0"\n'
         f'dependencies = ["pydantic>=2.12"{runtime_dependency}]\n'
     )
     monkeypatch.setattr(script, "sdk_root", lambda: template)
-    with pytest.raises(RuntimeError, match="Expected exactly one openai-codex-cli-bin"):
+    with pytest.raises(RuntimeError, match="Expected exactly one circle-codex-cli-bin"):
         script.stage_python_sdk_package(tmp_path / "sdk-stage", "1.2.3", "1.2.3")
 
 
@@ -1436,7 +1436,7 @@ def test_sdk_beta_can_pin_an_independent_runtime(tmp_path: Path) -> None:
     project = tomllib.loads((staged / "pyproject.toml").read_text())["project"]
     assert (project["version"], project["dependencies"]) == (
         "0.1.0b1",
-        ["pydantic>=2.12", "packaging>=26.2", "openai-codex-cli-bin==0.153.0"],
+        ["pydantic>=2.12", "packaging>=26.2", "circle-codex-cli-bin==0.153.0"],
     )
 
 
@@ -1479,7 +1479,7 @@ def test_sdk_release_matches_runtime(
         "sdk_dependencies": [
             "pydantic>=2.12",
             "packaging>=26.2",
-            f"openai-codex-cli-bin=={package_version}",
+            f"circle-codex-cli-bin=={package_version}",
         ],
     }
     assert (script.sdk_root() / "pyproject.toml").read_text() == source_pyproject

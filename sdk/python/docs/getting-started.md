@@ -8,7 +8,7 @@ with a multi-turn thread.
 Install the SDK:
 
 ```bash
-pip install openai-codex
+pip install circle-codex
 ```
 
 Requirements:
@@ -16,7 +16,7 @@ Requirements:
 - Python `>=3.10`
 - An existing Codex account session, or one of the login flows below
 
-The SDK installs its matching `openai-codex-cli-bin` runtime dependency
+The SDK installs its matching `circle-codex-cli-bin` runtime dependency
 automatically. Stable SDK releases track the corresponding stable Codex CLI release.
 
 ## 2. Authenticate When Needed

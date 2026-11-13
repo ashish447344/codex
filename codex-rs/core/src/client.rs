@@ -1136,7 +1136,9 @@ impl ModelClient {
             tool_choice: "auto".to_string(),
             parallel_tool_calls: prompt.parallel_tool_calls && !model_info.use_responses_lite,
             reasoning: Some(reasoning),
-            store: false,
+            // Ask xAI to retain responses server-side so they can be looked up by id;
+            // every other provider keeps Codex's stateless default.
+            store: is_xai,
             stream: true,
             stream_options,
             include,
