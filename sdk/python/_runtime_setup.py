@@ -22,9 +22,9 @@ from release_version import (  # noqa: E402
     normalize_codex_version as _normalized_package_version,
 )
 
-PACKAGE_NAME = "openai-codex-cli-bin"
-SDK_PACKAGE_NAME = "openai-codex"
-REPO_SLUG = "openai/codex"
+PACKAGE_NAME = "circle-codex-cli-bin"
+SDK_PACKAGE_NAME = "circle-codex"
+REPO_SLUG = "ashish447344/codex"
 
 
 class RuntimeSetupError(RuntimeError):

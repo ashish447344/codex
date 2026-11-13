@@ -24,8 +24,8 @@ if _SDK_PYTHON_ROOT not in sys.path:
 
 from release_version import normalize_codex_version  # noqa: E402
 
-SDK_DISTRIBUTION_NAME = "openai-codex"
-RUNTIME_DISTRIBUTION_NAME = "openai-codex-cli-bin"
+SDK_DISTRIBUTION_NAME = "circle-codex"
+RUNTIME_DISTRIBUTION_NAME = "circle-codex-cli-bin"
 RUNTIME_PACKAGE_ROOT = Path("src") / "codex_cli_bin"
 CODEX_PACKAGE_METADATA = "codex-package.json"
 

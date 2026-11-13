@@ -1905,3 +1905,33 @@ fn bundled_models_json_roundtrips() {
         "bundled models.json should contain at least one model"
     );
 }
+
+#[test]
+fn bundled_xai_models_json_includes_documented_reasoning_metadata() {
+    let response = crate::bundled_xai_models_response()
+        .unwrap_or_else(|err| panic!("bundled xAI models.json should parse: {err}"));
+    let grok_4_7 = response
+        .models
+        .iter()
+        .find(|model| model.slug == "grok-4.7")
+        .expect("bundled xAI catalog should include grok-4.7");
+
+    assert_eq!(grok_4_7.context_window, Some(500_000));
+    // xAI accepts flat function tools, while Code Mode emits unsupported namespace tools.
+    assert!(response.models.iter().all(|model| {
+        model.tool_mode == Some(codex_protocol::openai_models::ToolMode::Direct)
+    }));
+    assert_eq!(
+        grok_4_7
+            .supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort)
+            .collect::<Vec<_>>(),
+        vec![
+            codex_protocol::openai_models::ReasoningEffort::Low,
+            codex_protocol::openai_models::ReasoningEffort::Medium,
+            codex_protocol::openai_models::ReasoningEffort::High,
+            codex_protocol::openai_models::ReasoningEffort::XHigh,
+        ]
+    );
+}

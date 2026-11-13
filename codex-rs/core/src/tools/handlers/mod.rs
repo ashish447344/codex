@@ -91,9 +91,50 @@ pub(crate) fn parse_arguments<T>(arguments: &str) -> Result<T, FunctionCallError
 where
     T: for<'de> Deserialize<'de>,
 {
-    serde_json::from_str(arguments).map_err(|err| {
-        FunctionCallError::RespondToModel(format!("failed to parse function arguments: {err}"))
-    })
+    let err = match serde_json::from_str(arguments) {
+        Ok(parsed) => return Ok(parsed),
+        Err(err) => err,
+    };
+    // Grok writes whole numbers for `number` params as floats (`4000.0`), which serde
+    // refuses for integer fields. Retry once with those rewritten as integers.
+    if let Ok(mut value) = serde_json::from_str::<Value>(arguments)
+        && integral_floats_to_integers(&mut value)
+        && let Ok(parsed) = serde_json::from_value(value)
+    {
+        return Ok(parsed);
+    }
+    Err(FunctionCallError::RespondToModel(format!(
+        "failed to parse function arguments: {err}"
+    )))
+}
+
+/// Rewrites whole-number floats as integers and reports whether anything changed.
+fn integral_floats_to_integers(value: &mut Value) -> bool {
+    match value {
+        Value::Number(number) if number.is_f64() => match number.as_f64() {
+            // Below 2^53 every whole f64 converts to an integer exactly.
+            Some(float) if float.fract() == 0.0 && float.abs() < 9_007_199_254_740_992.0 => {
+                *number = (float as i64).into();
+                true
+            }
+            _ => false,
+        },
+        Value::Array(items) => {
+            let mut changed = false;
+            for item in items {
+                changed |= integral_floats_to_integers(item);
+            }
+            changed
+        }
+        Value::Object(fields) => {
+            let mut changed = false;
+            for item in fields.values_mut() {
+                changed |= integral_floats_to_integers(item);
+            }
+            changed
+        }
+        _ => false,
+    }
 }
 
 fn resolve_sandbox_permissions(
@@ -430,6 +471,7 @@ mod tests {
     use super::EffectiveAdditionalPermissions;
     use super::implicit_granted_permissions;
     use super::normalize_and_validate_additional_permissions;
+    use super::parse_arguments;
     use super::preapproved_permission_profile;
     use crate::sandboxing::SandboxPermissions;
     use codex_protocol::models::AdditionalPermissionProfile;
@@ -658,5 +700,24 @@ mod tests {
             preapproved_permission_profile(&effective, &granted, &tmpdir_context),
             Some(granted)
         );
+    }
+
+    #[test]
+    fn parse_arguments_accepts_whole_number_floats_for_integer_fields() {
+        #[derive(Debug, PartialEq, serde::Deserialize)]
+        struct Args {
+            cmd: String,
+            max_output_tokens: Option<usize>,
+        }
+
+        // Grok sends integer-valued `number` params as floats.
+        assert_eq!(
+            parse_arguments::<Args>(r#"{"cmd":"ls","max_output_tokens":4000.0}"#),
+            Ok(Args {
+                cmd: "ls".to_string(),
+                max_output_tokens: Some(4000),
+            })
+        );
+        assert!(parse_arguments::<Args>(r#"{"cmd":"ls","max_output_tokens":4000.5}"#).is_err());
     }
 }

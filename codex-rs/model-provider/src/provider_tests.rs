@@ -17,6 +17,7 @@ use codex_model_provider_info::ModelProviderAwsAuthInfo;
 use codex_model_provider_info::WireApi;
 use codex_model_provider_info::create_oss_provider_with_base_url;
 use codex_models_manager::ModelsManagerConfig;
+use codex_models_manager::manager::ModelsManager;
 use codex_models_manager::manager::RefreshStrategy;
 use codex_protocol::account::PlanType;
 use codex_protocol::config_types::ModelProviderAuthInfo;
@@ -200,6 +201,47 @@ fn configured_provider_uses_default_approval_review_preferred_model() {
     assert_eq!(
         provider.approval_review_preferred_model(),
         DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL
+    );
+}
+
+#[tokio::test]
+async fn xai_provider_uses_its_static_catalog_and_supported_capabilities() {
+    let provider = create_model_provider(
+        ModelProviderInfo::create_xai_provider(),
+        /*auth_manager*/ None,
+    );
+    let models = provider
+        .models_manager_without_cache(/*config_model_catalog*/ None)
+        .list_models(
+            RefreshStrategy::InMemory,
+            HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
+        )
+        .await;
+
+    assert_eq!(
+        models
+            .iter()
+            .map(|model| model.model.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "grok-4.7",
+            "grok-4.6",
+            "grok-4.5",
+            "grok-4.3",
+            "grok-4.20-0309-reasoning",
+            "grok-4.20-multi-agent",
+        ]
+    );
+    assert_eq!(provider.approval_review_preferred_model(), "grok-4.7");
+    assert_eq!(
+        provider.capabilities(),
+        ProviderCapabilities {
+            reasoning_summaries: false,
+            image_generation: false,
+            web_search: false,
+            external_web_access: false,
+            remote_compaction: RemoteCompactionSupport::Unsupported,
+        }
     );
 }
 

@@ -1,5 +1,30 @@
 # Python SDK releases
 
+## This fork: circle-codex
+
+This fork publishes two PyPI packages from one workflow,
+`.github/workflows/circle-python-release.yml`:
+
+- `circle-codex-cli-bin`: platform wheels with the fork's Codex CLI
+  (macOS arm64 and x86_64; Linux x86_64 and aarch64, manylinux and musllinux).
+- `circle-codex`: the pure-Python SDK, pinned to that exact runtime version.
+
+To release, open the Actions tab, pick `circle-python-release`, choose
+"Run workflow", and enter a version such as `0.154.0` (0.151.0 or newer). Leave
+"publish" unchecked for a build-only dry run; check it to upload to PyPI. The
+version is stamped into the Rust workspace during the build, so the checked-in
+`0.0.0` stays in place for local development. PyPI versions cannot be replaced,
+so every fix needs a new version.
+
+One-time setup: create a GitHub environment named `pypi`, and on PyPI add a
+trusted (pending) publisher for both package names that points at this
+repository, workflow `circle-python-release.yml`, environment `pypi`.
+
+The sections below describe the upstream OpenAI release process and its
+workflows, which do not run in this fork.
+
+## Upstream
+
 Stable CLI releases trigger `python-sdk-cli-release.yml` after `rust-release`
 finishes. Publication requires a successful `release` job and all required runtime
 assets on the published stable release; unrelated publisher failures, such as

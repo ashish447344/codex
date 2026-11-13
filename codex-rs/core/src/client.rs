@@ -194,6 +194,18 @@ fn session_telemetry_for_request(
     )
 }
 
+/// xAI's Responses API accepts top-level function tools but rejects Codex's
+/// OpenAI-specific `namespace` and `custom` tool wire formats. Keep the
+/// registered tools intact for local dispatch while advertising only the
+/// compatible subset to xAI.
+fn xai_compatible_tools(tools: &[ToolSpec]) -> Vec<ToolSpec> {
+    tools
+        .iter()
+        .filter(|tool| matches!(tool, ToolSpec::Function(_)))
+        .cloned()
+        .collect()
+}
+
 /// Session-scoped state shared by all [`ModelClient`] clones.
 ///
 /// This is intentionally kept minimal so `ModelClient` does not need to hold a full `Config`. Most
@@ -986,6 +998,29 @@ impl ModelClient {
             });
         }
         let is_openai = self.state.provider.info().is_openai();
+        let is_xai = self.state.provider.info().is_xai();
+        if is_xai {
+            // xAI compaction blobs are opaque and valid only when returned by xAI's
+            // `/responses/compact` endpoint. This provider uses Codex's local compaction,
+            // whose plaintext summary remains in history, so never replay a foreign blob.
+            input.retain(|item| {
+                !matches!(
+                    item,
+                    ResponseItem::Compaction { .. } | ResponseItem::ContextCompaction { .. }
+                )
+            });
+            // xAI types a reasoning item's `content` as a sequence. Codex serializes a
+            // missing value as `"content": null`, which xAI rejects with a misleading
+            // "Could not decode the compaction blob" 400. An empty list makes serde omit
+            // the key; the encrypted blob is untouched and saved history is unchanged.
+            for item in &mut input {
+                if let ResponseItem::Reasoning { content, .. } = item
+                    && content.is_none()
+                {
+                    *content = Some(Vec::new());
+                }
+            }
+        }
         // These prompt-only items are rebuilt on every request. Hash their visible payloads
         // within the thread so retries and resumed sessions preserve their identity.
         let prefix_namespace = Uuid::new_v5(
@@ -993,9 +1028,13 @@ impl ModelClient {
             self.state.thread_id.to_string().as_bytes(),
         );
         let mut prefix = Vec::new();
+        // xAI rejects namespace and custom tools even when Code Mode is disabled.
+        // Filter only the outgoing representation; the local tool registry still owns dispatch.
+        let xai_tools = is_xai.then(|| xai_compatible_tools(&prompt.tools));
+        let request_tools = xai_tools.as_deref().unwrap_or(&prompt.tools);
         let tools = if model_info.use_responses_lite {
-            if !prompt.tools.is_empty() {
-                let tools = create_tools_json_for_responses_lite(&prompt.tools)?;
+            if !request_tools.is_empty() {
+                let tools = create_tools_json_for_responses_lite(request_tools)?;
                 prefix.push(ResponseItem::AdditionalTools {
                     id: Some(ResponseItemId::with_suffix(
                         "at",
@@ -1007,7 +1046,7 @@ impl ModelClient {
             }
             None
         } else {
-            Some(create_tools_raw_json_for_responses_api(&prompt.tools)?.into())
+            Some(create_tools_raw_json_for_responses_api(request_tools)?.into())
         };
         if !prompt.base_instructions.text.is_empty() {
             let mut instructions = ContextualUserFragment::into(BaseInstructionsFragment(
@@ -1097,7 +1136,9 @@ impl ModelClient {
             tool_choice: "auto".to_string(),
             parallel_tool_calls: prompt.parallel_tool_calls && !model_info.use_responses_lite,
             reasoning: Some(reasoning),
-            store: false,
+            // Ask xAI to retain responses server-side so they can be looked up by id;
+            // every other provider keeps Codex's stateless default.
+            store: is_xai,
             stream: true,
             stream_options,
             include,

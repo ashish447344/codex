@@ -84,6 +84,9 @@ pub const OPENAI_PROVIDER_NAME: &str = "OpenAI";
 const OPENAI_ACTOR_AUTHORIZATION_HEADER: &str = "x-openai-actor-authorization";
 pub const OPENAI_PROVIDER_ID: &str = "openai";
 pub const CHATGPT_CODEX_BASE_URL: &str = "https://chatgpt.com/backend-api/codex";
+pub const XAI_PROVIDER_NAME: &str = "xAI";
+pub const XAI_PROVIDER_ID: &str = "xai";
+pub const XAI_API_BASE_URL: &str = "https://api.x.ai/v1";
 pub const AMAZON_BEDROCK_PROVIDER_NAME: &str = "Amazon Bedrock";
 pub const AMAZON_BEDROCK_PROVIDER_ID: &str = "amazon-bedrock";
 pub const AMAZON_BEDROCK_RUNTIME_PROVIDER_NAME: &str = "Amazon Bedrock Runtime";
@@ -613,6 +616,41 @@ other non-default provider fields are not supported"
         }
     }
 
+    /// Creates the built-in xAI provider so users select it by ID without defining it in config.
+    pub fn create_xai_provider() -> ModelProviderInfo {
+        ModelProviderInfo {
+            name: XAI_PROVIDER_NAME.into(),
+            base_url: Some(XAI_API_BASE_URL.into()),
+            model_catalog_url: None,
+            env_key: Some("XAI_API_KEY".into()),
+            env_key_instructions: Some(
+                "Create an API key at https://console.x.ai/ and set XAI_API_KEY in your environment."
+                    .into(),
+            ),
+            experimental_bearer_token: None,
+            auth: None,
+            gateway_oauth: None,
+            aws: None,
+            wire_api: WireApi::Responses,
+            query_params: None,
+            http_headers: None,
+            env_http_headers: None,
+            // xAI reasoning requests can run for several minutes at higher effort levels.
+            request_max_retries: None,
+            stream_max_retries: None,
+            stream_idle_timeout_ms: Some(1_800_000),
+            websocket_connect_timeout_ms: None,
+            requires_openai_auth: false,
+            supports_websockets: false,
+            supports_standalone_web_search: false,
+            capabilities: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            include_internal_metadata: false,
+        }
+    }
+
     pub fn create_amazon_bedrock_provider(
         aws: Option<ModelProviderAwsAuthInfo>,
     ) -> ModelProviderInfo {
@@ -707,6 +745,11 @@ other non-default provider fields are not supported"
         self.name == OPENAI_PROVIDER_NAME
     }
 
+    /// Identifies the built-in xAI provider independently of the configurable provider ID.
+    pub fn is_xai(&self) -> bool {
+        self.name == XAI_PROVIDER_NAME
+    }
+
     pub fn supports_codex_backend_routes(&self) -> bool {
         self.is_openai()
             && self.base_url.as_deref().is_none_or(|base_url| {
@@ -756,15 +799,17 @@ pub fn built_in_model_providers(
 ) -> HashMap<String, ModelProviderInfo> {
     use ModelProviderInfo as P;
     let openai_provider = P::create_openai_provider(openai_base_url);
+    let xai_provider = P::create_xai_provider();
     let amazon_bedrock_provider = P::create_amazon_bedrock_provider(/*aws*/ None);
     let amazon_bedrock_runtime_provider =
         P::create_amazon_bedrock_runtime_provider(/*aws*/ None);
     let gcp_provider = P::create_gcp_provider();
 
-    // Bundle OpenAI, supported cloud-hosted OpenAI backends, and local OSS providers.
+    // Bundle first-party, supported hosted, and local providers so they work without config.toml.
     // Other compatible providers can be added through `model_providers` in config.toml.
     [
         (OPENAI_PROVIDER_ID, openai_provider),
+        (XAI_PROVIDER_ID, xai_provider),
         (AMAZON_BEDROCK_PROVIDER_ID, amazon_bedrock_provider),
         (GCP_PROVIDER_ID, gcp_provider),
         (

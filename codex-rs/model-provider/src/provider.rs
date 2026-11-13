@@ -40,6 +40,7 @@ use crate::gcp::GcpModelProvider;
 use crate::models_endpoint::OpenAiModelsEndpoint;
 use crate::request_setup::resolve_request_auth;
 use crate::workspace_routing::WorkspaceRoutingContext;
+use crate::xai::XaiModelProvider;
 
 /// Current app-visible account state for a model provider.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -463,6 +464,10 @@ pub(crate) fn create_model_provider_with_runtime(
     }
     if provider_info.is_gcp() {
         return Arc::new(GcpModelProvider::new(provider_info, auth_manager));
+    }
+    if provider_info.is_xai() {
+        // xAI supplies Responses-compatible inference but needs a static Codex metadata catalog.
+        return Arc::new(XaiModelProvider::new(provider_info, auth_manager));
     }
     Arc::new(ConfiguredModelProvider::new(
         provider_info,

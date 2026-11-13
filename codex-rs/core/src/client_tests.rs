@@ -12,6 +12,7 @@ use super::X_CODEX_PARENT_THREAD_ID_HEADER;
 use super::X_CODEX_TURN_METADATA_HEADER;
 use super::X_CODEX_WINDOW_ID_HEADER;
 use super::X_OPENAI_SUBAGENT_HEADER;
+use super::xai_compatible_tools;
 use crate::AttestationContext;
 use crate::AttestationProvider;
 use crate::GenerateAttestationFuture;
@@ -2418,4 +2419,153 @@ async fn inference_tools_changes_follow_full_specs_across_turns() {
             "step {index}"
         );
     }
+}
+
+#[test]
+fn xai_compatible_tools_excludes_namespace_tools() {
+    let function = ResponsesApiTool {
+        name: "shell".into(),
+        description: "Run a shell command.".into(),
+        strict: false,
+        defer_loading: None,
+        parameters: JsonSchema::default(),
+        output_schema: None,
+    };
+    let namespace = codex_tools::ResponsesApiNamespace {
+        name: "unsupported_namespace".into(),
+        description: "xAI does not accept this Responses API tool shape.".into(),
+        tools: vec![codex_tools::ResponsesApiNamespaceTool::Function(
+            function.clone(),
+        )],
+    };
+
+    assert_eq!(
+        xai_compatible_tools(&[
+            ToolSpec::Function(function.clone()),
+            ToolSpec::Namespace(namespace),
+        ]),
+        vec![ToolSpec::Function(function)]
+    );
+}
+
+#[test]
+fn xai_responses_requests_omit_unsupported_tool_shapes() -> anyhow::Result<()> {
+    let mut client = test_model_client(SessionSource::Cli);
+    Arc::get_mut(&mut client.state)
+        .expect("test client should have unique session state")
+        .provider = create_model_provider(
+            ModelProviderInfo::create_xai_provider(),
+            /*auth_manager*/ None,
+        );
+    let function = ResponsesApiTool {
+        name: "shell".into(),
+        description: "Run a shell command.".into(),
+        strict: false,
+        defer_loading: None,
+        parameters: JsonSchema::default(),
+        output_schema: None,
+    };
+    let namespace = codex_tools::ResponsesApiNamespace {
+        name: "unsupported_namespace".into(),
+        description: "xAI does not accept this Responses API tool shape.".into(),
+        tools: vec![codex_tools::ResponsesApiNamespaceTool::Function(
+            function.clone(),
+        )],
+    };
+    let prompt = Prompt {
+        input: vec![ResponseItem::Compaction {
+            id: None,
+            encrypted_content: "foreign-compaction-blob".into(),
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        tools: vec![
+            ToolSpec::Function(function.clone()),
+            ToolSpec::Namespace(namespace),
+        ]
+        .into(),
+        ..Default::default()
+    };
+
+    let request = client.build_responses_request(
+        &prompt,
+        &test_model_info(),
+        /*effort*/ None,
+        codex_protocol::config_types::ReasoningSummary::None,
+        /*service_tier*/ None,
+        &test_responses_metadata_for_client(
+            &client,
+            /*turn_id*/ None,
+            format!("{}:0", client.state.thread_id),
+            /*parent_thread_id*/ None,
+            TestCodexResponsesRequestKind::Turn,
+        ),
+        /*include_internal*/ true,
+    )?;
+
+    // The base-instructions message is always prepended, so look for the blob itself.
+    assert!(
+        !request.input.iter().any(|item| matches!(
+            item,
+            ResponseItem::Compaction { .. } | ResponseItem::ContextCompaction { .. }
+        )),
+        "xAI requests must not replay compaction blobs from another provider"
+    );
+    assert_eq!(
+        serde_json::to_value(request)?["tools"],
+        serde_json::to_value(vec![ToolSpec::Function(function)])?
+    );
+    Ok(())
+}
+
+#[test]
+fn xai_responses_requests_omit_null_reasoning_content() -> anyhow::Result<()> {
+    let mut client = test_model_client(SessionSource::Cli);
+    Arc::get_mut(&mut client.state)
+        .expect("test client should have unique session state")
+        .provider = create_model_provider(
+            ModelProviderInfo::create_xai_provider(),
+            /*auth_manager*/ None,
+        );
+    let prompt = Prompt {
+        input: vec![ResponseItem::Reasoning {
+            id: None,
+            summary: Vec::new(),
+            content: None,
+            encrypted_content: Some("xai-reasoning-blob".into()),
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        ..Default::default()
+    };
+
+    let request = client.build_responses_request(
+        &prompt,
+        &test_model_info(),
+        /*effort*/ None,
+        codex_protocol::config_types::ReasoningSummary::None,
+        /*service_tier*/ None,
+        &test_responses_metadata_for_client(
+            &client,
+            /*turn_id*/ None,
+            format!("{}:0", client.state.thread_id),
+            /*parent_thread_id*/ None,
+            TestCodexResponsesRequestKind::Turn,
+        ),
+        /*include_internal*/ true,
+    )?;
+
+    // xAI answers `"content": null` with "Could not decode the compaction blob". The
+    // request also carries the base-instructions message, so check the replayed item only.
+    let request = serde_json::to_value(request)?;
+    // xAI requests opt in to server-side storage.
+    assert_eq!(request["store"], json!(true));
+    let input = request["input"]
+        .as_array()
+        .expect("request input should be an array");
+    let expected = json!({
+        "type": "reasoning",
+        "summary": [],
+        "encrypted_content": "xai-reasoning-blob",
+    });
+    assert_eq!(input.last(), Some(&expected));
+    Ok(())
 }
