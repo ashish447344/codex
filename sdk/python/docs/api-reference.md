@@ -52,6 +52,12 @@ from openai_codex.types import (
 - Requires Python >= 3.10
 - Public Codex protocol value and event types live in `openai_codex.types`
 
+`CodexConfig.env` overrides inherited environment variables by default. Set
+`CodexConfig(inherit_env=False, env={...})` when the runtime must omit parent
+environment variables. Include `PATH`, `HOME`, `CODEX_HOME`, and the selected
+provider credential as needed for the process and its tools. The SDK may
+prepend its bundled binary directory to `PATH`.
+
 ## Codex (sync)
 
 ```python

@@ -1316,6 +1316,21 @@ def test_runtime_path_dir_is_prepended_without_duplicates(tmp_path: Path) -> Non
     assert env["PATH"] == os.pathsep.join([str(path_dir), "/usr/bin", "/bin"])
 
 
+def test_runtime_can_use_exact_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    from openai_codex import client as client_module
+
+    monkeypatch.setenv("OPENAI_API_KEY", "unselected-provider-secret")
+    config = client_module.CodexConfig(
+        env={"PATH": "/usr/bin", "XAI_API_KEY": "selected-provider-secret"},
+        inherit_env=False,
+    )
+    isolated = client_module._subprocess_env(config, ())
+    assert isolated == config.env
+    assert "OPENAI_API_KEY" not in isolated
+    inherited = client_module._subprocess_env(client_module.CodexConfig(env=config.env), ())
+    assert inherited["OPENAI_API_KEY"] == "unselected-provider-secret"
+
+
 def test_runtime_path_dir_preserves_windows_path_key(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

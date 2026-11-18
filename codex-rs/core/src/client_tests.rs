@@ -2454,9 +2454,9 @@ fn xai_responses_requests_omit_unsupported_tool_shapes() -> anyhow::Result<()> {
     Arc::get_mut(&mut client.state)
         .expect("test client should have unique session state")
         .provider = create_model_provider(
-            ModelProviderInfo::create_xai_provider(),
-            /*auth_manager*/ None,
-        );
+        ModelProviderInfo::create_xai_provider(),
+        /*auth_manager*/ None,
+    );
     let function = ResponsesApiTool {
         name: "shell".into(),
         description: "Run a shell command.".into(),
@@ -2523,9 +2523,9 @@ fn xai_responses_requests_omit_null_reasoning_content() -> anyhow::Result<()> {
     Arc::get_mut(&mut client.state)
         .expect("test client should have unique session state")
         .provider = create_model_provider(
-            ModelProviderInfo::create_xai_provider(),
-            /*auth_manager*/ None,
-        );
+        ModelProviderInfo::create_xai_provider(),
+        /*auth_manager*/ None,
+    );
     let prompt = Prompt {
         input: vec![ResponseItem::Reasoning {
             id: None,
@@ -2567,5 +2567,101 @@ fn xai_responses_requests_omit_null_reasoning_content() -> anyhow::Result<()> {
         "encrypted_content": "xai-reasoning-blob",
     });
     assert_eq!(input.last(), Some(&expected));
+    Ok(())
+}
+
+#[test]
+fn xai_responses_requests_pair_external_tool_outputs_only_on_the_wire() -> anyhow::Result<()> {
+    let mut xai = test_model_client(SessionSource::Cli);
+    Arc::get_mut(&mut xai.state)
+        .expect("test client should have unique session state")
+        .provider = create_model_provider(
+        ModelProviderInfo::create_xai_provider(),
+        /*auth_manager*/ None,
+    );
+    let external = |name: &str, namespace: Option<&str>| ResponseItem::FunctionCallOutput {
+        id: None,
+        call_id: None,
+        name: Some(name.to_string()),
+        namespace: namespace.map(str::to_string),
+        output: FunctionCallOutputPayload::from_text("same brokered result".to_string()),
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let prompt = Prompt {
+        input: vec![
+            external("gitlab.get_project", None),
+            external("jira.get_issue", Some("atlassian")),
+            ResponseItem::from(ResponseInputItem::FunctionCallOutput {
+                call_id: "existing-tool-call".to_string(),
+                output: FunctionCallOutputPayload::from_text("native result".to_string()),
+            }),
+        ],
+        ..Default::default()
+    };
+    let original = serde_json::to_value(&prompt.input)?;
+    let build = |client: &ModelClient| -> anyhow::Result<serde_json::Value> {
+        let request = client.build_responses_request(
+            &prompt,
+            &test_model_info(),
+            /*effort*/ None,
+            codex_protocol::config_types::ReasoningSummary::None,
+            /*service_tier*/ None,
+            &test_responses_metadata_for_client(
+                client,
+                /*turn_id*/ None,
+                format!("{}:0", client.state.thread_id),
+                /*parent_thread_id*/ None,
+                TestCodexResponsesRequestKind::Turn,
+            ),
+            /*include_internal*/ true,
+        )?;
+        Ok(serde_json::to_value(request)?)
+    };
+    let first = build(&xai)?;
+    let retried = build(&xai)?;
+    assert_eq!(first["input"], retried["input"]);
+    assert_eq!(serde_json::to_value(&prompt.input)?, original);
+    let relevant = first["input"]
+        .as_array()
+        .expect("request input should be an array")
+        .iter()
+        .filter(|item| item["type"] == "function_call" || item["type"] == "function_call_output")
+        .collect::<Vec<_>>();
+    assert_eq!(relevant.len(), 5);
+    for (call, output, expected_name) in [
+        (relevant[0], relevant[1], "gitlab.get_project"),
+        (relevant[2], relevant[3], "atlassian.jira.get_issue"),
+    ] {
+        assert_eq!(call["type"], "function_call");
+        assert_eq!(call["name"], expected_name);
+        assert_eq!(call["arguments"], "{}");
+        assert_eq!(output["call_id"], call["call_id"]);
+        assert!(output.get("name").is_none());
+        assert!(output.get("namespace").is_none());
+    }
+    assert_ne!(relevant[0]["call_id"], relevant[2]["call_id"]);
+    assert_eq!(relevant[4]["call_id"], "existing-tool-call");
+
+    let mut openai = test_model_client(SessionSource::Cli);
+    Arc::get_mut(&mut openai.state)
+        .expect("test client should have unique session state")
+        .provider = create_model_provider(
+        ModelProviderInfo::create_openai_provider(None),
+        /*auth_manager*/ None,
+    );
+    let openai_request = build(&openai)?;
+    let openai_items = openai_request["input"]
+        .as_array()
+        .expect("request input should be an array");
+    assert!(
+        !openai_items
+            .iter()
+            .any(|item| item["type"] == "function_call")
+    );
+    assert!(
+        openai_items
+            .iter()
+            .any(|item| item["name"] == "gitlab.get_project")
+    );
     Ok(())
 }

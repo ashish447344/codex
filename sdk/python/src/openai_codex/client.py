@@ -197,7 +197,9 @@ class CodexConfig:
     """Configuration for launching and identifying the local Codex runtime.
 
     Most callers can use ``Codex()`` without configuration. Set ``codex_bin``
-    only when intentionally using a specific local Codex executable.
+    only when intentionally using a specific local Codex executable. Set
+    ``inherit_env=False`` to omit parent environment variables from the runtime
+    process. The SDK may still prepend its bundled binary directory to ``PATH``.
     """
 
     codex_bin: str | None = None
@@ -205,10 +207,18 @@ class CodexConfig:
     config_overrides: tuple[str, ...] = ()
     cwd: str | None = None
     env: dict[str, str] | None = None
+    inherit_env: bool = True
     client_name: str = "codex_python_sdk"
     client_title: str = "Codex Python SDK"
     client_version: str = SDK_VERSION
     experimental_api: bool = True
+
+
+def _subprocess_env(config: CodexConfig, path_dirs: tuple[Path, ...]) -> dict[str, str]:
+    env = os.environ.copy() if config.inherit_env else {}
+    env.update(config.env or {})
+    _prepend_path_dirs(env, path_dirs)
+    return env
 
 
 class CodexClient:
@@ -255,10 +265,7 @@ class CodexClient:
                 args.extend(["--config", kv])
             args.extend(["app-server", "--listen", "stdio://"])
 
-        env = os.environ.copy()
-        if self.config.env:
-            env.update(self.config.env)
-        _prepend_path_dirs(env, path_dirs)
+        env = _subprocess_env(self.config, path_dirs)
 
         if self.config.launch_args_override is None:
             self._checkout_capabilities = CheckoutCapabilities(

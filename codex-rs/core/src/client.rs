@@ -1020,6 +1020,56 @@ impl ModelClient {
                     *content = Some(Vec::new());
                 }
             }
+            // The SDK accepts external tool results without a preceding call ID. xAI
+            // requires each function output to match a function call. Pair these
+            // only in the outgoing request; saved history and SDK notifications
+            // must retain the original lower-authority external message.
+            let mut paired = Vec::with_capacity(input.len());
+            for (index, mut item) in input.into_iter().enumerate() {
+                if let ResponseItem::FunctionCallOutput {
+                    call_id,
+                    name,
+                    namespace,
+                    output,
+                    ..
+                } = &mut item
+                    && call_id.is_none()
+                    && let Some(raw_name) = name.as_ref()
+                {
+                    let source_name = match namespace.as_deref() {
+                        Some(namespace) => format!("{namespace}.{raw_name}"),
+                        None => raw_name.clone(),
+                    };
+                    let identity = serde_json::to_vec(&(
+                        self.state.thread_id.to_string(),
+                        index,
+                        &source_name,
+                        &*output,
+                    ))?;
+                    let generated_call_id = format!(
+                        "call_{}",
+                        Uuid::new_v5(&Uuid::NAMESPACE_OID, &identity).simple()
+                    );
+                    paired.push(ResponseItem::FunctionCall {
+                        encrypted_content: None,
+                        status: None,
+                        id: None,
+                        name: source_name,
+                        namespace: None,
+                        arguments: "{}".to_string(),
+                        encrypted_function_args: None,
+                        call_id: generated_call_id.clone(),
+                        internal_chat_message_metadata_passthrough: None,
+                    });
+                    *call_id = Some(generated_call_id);
+                    *name = None;
+                    // xAI identifies the result by call_id; the SDK's source
+                    // name/namespace remain in the untouched history item.
+                    *namespace = None;
+                }
+                paired.push(item);
+            }
+            input = paired;
         }
         // These prompt-only items are rebuilt on every request. Hash their visible payloads
         // within the thread so retries and resumed sessions preserve their identity.
