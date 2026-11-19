@@ -619,8 +619,42 @@ pub enum ThreadStoreConfig {
     /// Persist threads locally using rollout JSONL files and sqlite metadata.
     #[default]
     Local,
+    /// Persist threads and app-server runtime state in shared remote services.
+    Remote(RemoteThreadStoreConfig),
     /// In-memory thread store for test and debug configurations.
     InMemory { id: String },
+}
+
+/// Connection references and coordination settings for a remote thread store.
+///
+/// The URLs are resolved from the app-server's environment at startup, so this
+/// configuration can safely be passed through the Python SDK without adding
+/// credentials to `config.toml`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteThreadStoreConfig {
+    pub mongo: RemoteMongoConfig,
+    pub mysql: RemoteMysqlConfig,
+    pub redis: RemoteRedisConfig,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteMongoConfig {
+    pub url_env: String,
+    pub database: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteMysqlConfig {
+    pub url_env: String,
+    pub database: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteRedisConfig {
+    pub url_env: String,
+    pub namespace: String,
+    pub acquire_timeout_ms: u64,
+    pub lease_ttl_ms: u64,
 }
 
 /// Application configuration loaded from disk and merged with overrides.
@@ -2636,6 +2670,26 @@ fn resolve_tool_suggest_config_from_config(
 fn thread_store_config(thread_store: Option<ThreadStoreToml>) -> ThreadStoreConfig {
     match thread_store {
         Some(ThreadStoreToml::Local {}) => ThreadStoreConfig::Local,
+        Some(ThreadStoreToml::Remote {
+            mongo,
+            mysql,
+            redis,
+        }) => ThreadStoreConfig::Remote(RemoteThreadStoreConfig {
+            mongo: RemoteMongoConfig {
+                url_env: mongo.url_env,
+                database: mongo.database,
+            },
+            mysql: RemoteMysqlConfig {
+                url_env: mysql.url_env,
+                database: mysql.database,
+            },
+            redis: RemoteRedisConfig {
+                url_env: redis.url_env,
+                namespace: redis.namespace,
+                acquire_timeout_ms: redis.acquire_timeout_ms,
+                lease_ttl_ms: redis.lease_ttl_ms,
+            },
+        }),
         Some(ThreadStoreToml::InMemory { id }) => ThreadStoreConfig::InMemory { id },
         None => ThreadStoreConfig::Local,
     }

@@ -37,7 +37,7 @@ from .api import (
     TurnHandle,
     TurnResult,
 )
-from .client import CodexConfig
+from .client import CodexConfig, RemoteThreadStoreConfig
 from .errors import (
     CodexError,
     CodexRpcError,
@@ -57,6 +57,7 @@ from .retry import retry_on_overload
 __all__ = [
     "__version__",
     "CodexConfig",
+    "RemoteThreadStoreConfig",
     "Codex",
     "AsyncCodex",
     "ApprovalMode",

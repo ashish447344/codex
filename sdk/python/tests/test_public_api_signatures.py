@@ -15,6 +15,7 @@ from openai_codex import (
     Codex,
     CodexConfig,
     ExternalMessage,
+    RemoteThreadStoreConfig,
     Sandbox,
     Thread,
     TurnHandle,
@@ -31,6 +32,7 @@ except ModuleNotFoundError:
 EXPECTED_ROOT_EXPORTS = [
     "__version__",
     "CodexConfig",
+    "RemoteThreadStoreConfig",
     "Codex",
     "AsyncCodex",
     "ApprovalMode",
@@ -137,6 +139,7 @@ def _assert_no_any_annotations(fn: object) -> None:
 def test_root_exports_codex_config() -> None:
     """The root package should expose the process configuration object."""
     assert CodexConfig.__name__ == "CodexConfig"
+    assert RemoteThreadStoreConfig.__name__ == "RemoteThreadStoreConfig"
 
 
 def test_root_exports_turn_result() -> None:

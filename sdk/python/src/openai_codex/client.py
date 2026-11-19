@@ -76,6 +76,48 @@ class _ThreadStartLock:
     users: int = 0
 
 
+@dataclass(frozen=True, slots=True)
+class RemoteThreadStoreConfig:
+    """Remote persistence settings for the Rust app-server.
+
+    The SDK passes connection URLs only through the app-server child process
+    environment. It never sends them over JSON-RPC or records them in thread
+    data. MongoDB owns rollout items, MySQL/MariaDB owns relational state, and
+    Redis owns distributed writer leases.
+    """
+
+    mongo_url: str
+    mongo_database: str
+    mysql_url: str
+    mysql_database: str
+    redis_url: str
+    redis_namespace: str = "codex"
+    redis_acquire_timeout_ms: int = 30_000
+    redis_lease_ttl_ms: int = 120_000
+
+    def config_overrides(self) -> tuple[str, ...]:
+        return (
+            'experimental_thread_store.type = "remote"',
+            'experimental_thread_store.mongo.url_env = "CODEX_REMOTE_MONGO_URL"',
+            f"experimental_thread_store.mongo.database = {json.dumps(self.mongo_database)}",
+            'experimental_thread_store.mysql.url_env = "CODEX_REMOTE_MYSQL_URL"',
+            f"experimental_thread_store.mysql.database = {json.dumps(self.mysql_database)}",
+            'experimental_thread_store.redis.url_env = "CODEX_REMOTE_REDIS_URL"',
+            f"experimental_thread_store.redis.namespace = {json.dumps(self.redis_namespace)}",
+            "experimental_thread_store.redis.acquire_timeout_ms = "
+            f"{self.redis_acquire_timeout_ms}",
+            "experimental_thread_store.redis.lease_ttl_ms = "
+            f"{self.redis_lease_ttl_ms}",
+        )
+
+    def environment(self) -> dict[str, str]:
+        return {
+            "CODEX_REMOTE_MONGO_URL": self.mongo_url,
+            "CODEX_REMOTE_MYSQL_URL": self.mysql_url,
+            "CODEX_REMOTE_REDIS_URL": self.redis_url,
+        }
+
+
 def _active_turn_id_from_error(exc: InvalidRequestError) -> str | None:
     match = re.search(r" but found `?([^`]+)`?$", exc.message)
     return match.group(1) if match is not None else None
@@ -205,6 +247,7 @@ class CodexConfig:
     codex_bin: str | None = None
     launch_args_override: tuple[str, ...] | None = None
     config_overrides: tuple[str, ...] = ()
+    remote_thread_store: RemoteThreadStoreConfig | None = None
     cwd: str | None = None
     env: dict[str, str] | None = None
     inherit_env: bool = True
@@ -216,6 +259,8 @@ class CodexConfig:
 
 def _subprocess_env(config: CodexConfig, path_dirs: tuple[Path, ...]) -> dict[str, str]:
     env = os.environ.copy() if config.inherit_env else {}
+    if config.remote_thread_store is not None:
+        env.update(config.remote_thread_store.environment())
     env.update(config.env or {})
     _prepend_path_dirs(env, path_dirs)
     return env
@@ -261,7 +306,12 @@ class CodexClient:
             if self.config.codex_bin is None:
                 path_dirs = _installed_codex_path_dirs()
             args = [str(codex_bin)]
-            for kv in self.config.config_overrides:
+            remote_overrides = (
+                self.config.remote_thread_store.config_overrides()
+                if self.config.remote_thread_store is not None
+                else ()
+            )
+            for kv in (*remote_overrides, *self.config.config_overrides):
                 args.extend(["--config", kv])
             args.extend(["app-server", "--listen", "stdio://"])
 

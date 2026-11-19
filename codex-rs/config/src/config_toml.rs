@@ -576,10 +576,64 @@ pub struct ConfigToml {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ThreadStoreToml {
     Local {},
+    /// Persist thread and app-server state in MongoDB, MySQL/MariaDB, and Redis.
+    ///
+    /// Secrets are deliberately referenced by environment-variable name instead
+    /// of stored in `config.toml`. Hosts such as the Python SDK can pass those
+    /// variables only to the spawned app-server process.
+    Remote {
+        mongo: RemoteMongoToml,
+        mysql: RemoteMysqlToml,
+        redis: RemoteRedisToml,
+    },
     #[schemars(skip)]
     InMemory {
         id: String,
     },
+}
+
+/// MongoDB settings for the remote thread store.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct RemoteMongoToml {
+    /// Name of the environment variable containing the MongoDB connection URI.
+    pub url_env: String,
+    /// Database used for append-only rollout documents and document-oriented runtime state.
+    pub database: String,
+}
+
+/// MySQL or MariaDB settings for the remote thread store.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct RemoteMysqlToml {
+    /// Name of the environment variable containing the MySQL/MariaDB connection URI.
+    pub url_env: String,
+    /// Database used for relational app-server state.
+    pub database: String,
+}
+
+/// Redis settings for remote writer ownership and distributed coordination.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct RemoteRedisToml {
+    /// Name of the environment variable containing the Redis connection URI.
+    pub url_env: String,
+    /// Prefix applied to every Redis key owned by this deployment.
+    pub namespace: String,
+    /// Maximum time to wait for a contended thread-writer lease.
+    #[serde(default = "default_remote_lock_acquire_timeout_ms")]
+    pub acquire_timeout_ms: u64,
+    /// Lease duration. Implementations renew ownership before this duration expires.
+    #[serde(default = "default_remote_lock_lease_ttl_ms")]
+    pub lease_ttl_ms: u64,
+}
+
+const fn default_remote_lock_acquire_timeout_ms() -> u64 {
+    30_000
+}
+
+const fn default_remote_lock_lease_ttl_ms() -> u64 {
+    120_000
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
@@ -968,9 +1022,7 @@ pub fn validate_reserved_model_provider_ids(
             }
             !matches!(
                 key.as_str(),
-                AMAZON_BEDROCK_PROVIDER_ID
-                    | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID
-                    | GCP_PROVIDER_ID
+                AMAZON_BEDROCK_PROVIDER_ID | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID | GCP_PROVIDER_ID
             ) && RESERVED_MODEL_PROVIDER_IDS.contains(&key.as_str())
         })
         .map(|key| format!("`{key}`"))

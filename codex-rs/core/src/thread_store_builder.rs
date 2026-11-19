@@ -9,6 +9,8 @@ use codex_rollout::state_db::StateDbHandle;
 use codex_thread_store::InMemoryThreadStore;
 use codex_thread_store::LocalThreadStore;
 use codex_thread_store::LocalThreadStoreConfig;
+use codex_thread_store::RemoteThreadStore;
+use codex_thread_store::RemoteThreadStoreConfig;
 use codex_thread_store::ThreadStore;
 use codex_thread_store::ThreadStoreFuture;
 use std::sync::Arc;
@@ -102,6 +104,26 @@ impl<'config> ThreadStoreBuilder<'config> {
             }
             ThreadStoreConfig::InMemory { id } => {
                 Arc::new(InMemoryThreadStore::for_id(id).with_state_db(state_db))
+            }
+            ThreadStoreConfig::Remote(remote) => {
+                assert!(
+                    state_db.is_none(),
+                    "remote thread store must not be constructed with local SQLite state"
+                );
+                let config = RemoteThreadStoreConfig::from_environment(
+                    &remote.mongo.url_env,
+                    remote.mongo.database.clone(),
+                    &remote.mysql.url_env,
+                    remote.mysql.database.clone(),
+                    &remote.redis.url_env,
+                    remote.redis.namespace.clone(),
+                    remote.redis.acquire_timeout_ms,
+                    remote.redis.lease_ttl_ms,
+                )
+                .unwrap_or_else(|error| {
+                    panic!("invalid remote thread-store configuration: {error}")
+                });
+                Arc::new(RemoteThreadStore::new(config))
             }
         }
     }
