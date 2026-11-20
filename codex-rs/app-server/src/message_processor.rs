@@ -102,7 +102,6 @@ use codex_state::log_db::LogDbLayer;
 use codex_thread_store::LocalQueueStore;
 use codex_thread_store::QueueStore;
 use codex_thread_store::RemoteQueueStore;
-use codex_thread_store::RemoteThreadStoreConfig;
 use codex_thread_store::ThreadStoreError;
 use tokio::sync::Mutex;
 use tokio::sync::Semaphore;
@@ -350,19 +349,11 @@ impl MessageProcessor {
                 Arc::new(LocalQueueStore::new(Arc::clone(state_db))) as Arc<dyn QueueStore>
             }),
             ThreadStoreConfig::Remote(remote) => {
-                let remote_config = RemoteThreadStoreConfig::from_environment(
-                    &remote.mongo.url_env,
-                    remote.mongo.database.clone(),
-                    &remote.mysql.url_env,
-                    remote.mysql.database.clone(),
-                    &remote.redis.url_env,
-                    remote.redis.namespace.clone(),
-                    remote.redis.acquire_timeout_ms,
-                    remote.redis.lease_ttl_ms,
-                )
-                .unwrap_or_else(|error| {
-                    panic!("invalid remote thread-store configuration: {error}")
-                });
+                // `run_main_with_transport_options` already validated this configuration.
+                let remote_config = codex_core::resolve_remote_thread_store_config(remote)
+                    .unwrap_or_else(|error| {
+                        panic!("invalid remote thread-store configuration: {error}")
+                    });
                 Some(
                     Arc::new(RemoteQueueStore::new(remote_config.queue_store_config()))
                         as Arc<dyn QueueStore>,

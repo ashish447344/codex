@@ -1345,6 +1345,7 @@ def test_remote_thread_store_settings_stay_in_child_environment() -> None:
     config = client_module.CodexConfig(remote_thread_store=remote, inherit_env=False)
 
     assert client_module._subprocess_env(config, ()) == remote.environment()
+    assert "example" not in repr(remote)
     assert remote.config_overrides() == (
         'experimental_thread_store.type = "remote"',
         'experimental_thread_store.mongo.url_env = "CODEX_REMOTE_MONGO_URL"',

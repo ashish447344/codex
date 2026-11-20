@@ -4,11 +4,11 @@ use std::sync::Arc;
 
 use codex_protocol::ThreadId;
 use codex_state::QueuedUserSubmissionRecord;
+use sqlx::AssertSqlSafe;
 use sqlx::MySql;
 use sqlx::MySqlPool;
 use sqlx::QueryBuilder;
 use sqlx::Row;
-use sqlx::mysql::MySqlPoolOptions;
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
@@ -16,6 +16,8 @@ use crate::MAX_QUEUE_ITEMS;
 use crate::QueueStore;
 use crate::ThreadStoreError;
 use crate::ThreadStoreFuture;
+use crate::remote::connect_mysql_pool;
+use crate::remote::quoted_identifier;
 
 /// Resolved MySQL settings shared by remote runtime services.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -42,18 +44,18 @@ impl RemoteQueueStore {
     async fn pool(&self) -> Result<&MySqlPool, ThreadStoreError> {
         self.pool
             .get_or_try_init(|| async {
-                let pool = MySqlPoolOptions::new()
-                    .max_connections(10)
-                    .connect(&self.config.mysql_url)
+                let pool = connect_mysql_pool(&self.config.mysql_url)
                     .await
                     .map_err(internal)?;
-                let database = quoted_database(&self.config.mysql_database)?;
-                sqlx::query(&format!("CREATE DATABASE IF NOT EXISTS {database}"))
-                    .execute(&pool)
-                    .await
-                    .map_err(internal)?;
+                let database = quoted_identifier(&self.config.mysql_database)?;
+                sqlx::query(AssertSqlSafe(format!(
+                    "CREATE DATABASE IF NOT EXISTS {database}"
+                )))
+                .execute(&pool)
+                .await
+                .map_err(internal)?;
                 for statement in queue_schema(&database) {
-                    sqlx::query(statement)
+                    sqlx::query(AssertSqlSafe(statement))
                         .execute(&pool)
                         .await
                         .map_err(internal)?;
@@ -66,7 +68,7 @@ impl RemoteQueueStore {
     fn table(&self, table: &str) -> Result<String, ThreadStoreError> {
         Ok(format!(
             "{}.{}",
-            quoted_database(&self.config.mysql_database)?,
+            quoted_identifier(&self.config.mysql_database)?,
             table
         ))
     }
@@ -78,11 +80,11 @@ impl RemoteQueueStore {
     ) -> Result<(), ThreadStoreError> {
         // This per-thread row serializes writers even before the thread has queue items.
         // The lock is held until this transaction commits or rolls back.
-        sqlx::query(&format!(
+        sqlx::query(AssertSqlSafe(format!(
             "INSERT INTO {} (thread_id) VALUES (?)
              ON DUPLICATE KEY UPDATE thread_id = VALUES(thread_id)",
             self.table("queued_queue_locks")?
-        ))
+        )))
         .bind(thread_id.to_string())
         .execute(transaction.as_mut())
         .await
@@ -95,20 +97,20 @@ impl RemoteQueueStore {
         transaction: &mut sqlx::Transaction<'_, MySql>,
         thread_id: ThreadId,
     ) -> Result<(), ThreadStoreError> {
-        let revision = sqlx::query(&format!(
+        let revision = sqlx::query(AssertSqlSafe(format!(
             "INSERT INTO {} (thread_id) VALUES (?)",
             self.table("queued_queue_revisions")?
-        ))
+        )))
         .bind(thread_id.to_string())
         .execute(transaction.as_mut())
         .await
         .map_err(internal)?
         .last_insert_id();
-        sqlx::query(&format!(
+        sqlx::query(AssertSqlSafe(format!(
             "INSERT INTO {} (thread_id, revision) VALUES (?, ?)
              ON DUPLICATE KEY UPDATE revision = VALUES(revision)",
             self.table("queued_thread_revisions")?
-        ))
+        )))
         .bind(thread_id.to_string())
         .bind(i64::try_from(revision).map_err(internal)?)
         .execute(transaction.as_mut())
@@ -121,10 +123,10 @@ impl RemoteQueueStore {
 impl QueueStore for RemoteQueueStore {
     fn change_version(&self) -> ThreadStoreFuture<'_, i64> {
         Box::pin(async move {
-            sqlx::query_scalar(&format!(
+            sqlx::query_scalar(AssertSqlSafe(format!(
                 "SELECT COALESCE(MAX(revision), 0) FROM {}",
                 self.table("queued_queue_revisions")?
-            ))
+            )))
             .fetch_one(self.pool().await?)
             .await
             .map_err(internal)
@@ -174,10 +176,10 @@ impl QueueStore for RemoteQueueStore {
             let pool = self.pool().await?;
             let mut transaction = pool.begin().await.map_err(internal)?;
             self.lock_thread(&mut transaction, thread_id).await?;
-            let count: i64 = sqlx::query_scalar(&format!(
+            let count: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
                 "SELECT COUNT(*) FROM {} WHERE thread_id = ?",
                 self.table("queued_items")?
-            ))
+            )))
             .bind(thread_id.to_string())
             .fetch_one(transaction.as_mut())
             .await
@@ -190,10 +192,10 @@ impl QueueStore for RemoteQueueStore {
                     ),
                 });
             }
-            let order: i64 = sqlx::query_scalar(&format!(
+            let order: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
                 "SELECT COALESCE(MAX(queue_order), -1) + 1 FROM {} WHERE thread_id = ?",
                 self.table("queued_items")?
-            ))
+            )))
             .bind(thread_id.to_string())
             .fetch_one(transaction.as_mut())
             .await
@@ -204,12 +206,12 @@ impl QueueStore for RemoteQueueStore {
                 payload,
             };
             let now_ms = chrono::Utc::now().timestamp_millis();
-            sqlx::query(&format!(
+            sqlx::query(AssertSqlSafe(format!(
                 "INSERT INTO {}
                  (id, thread_id, payload_json, queue_order, created_at_ms, updated_at_ms)
                  VALUES (?, ?, ?, ?, ?, ?)",
                 self.table("queued_items")?
-            ))
+            )))
             .bind(&item.id)
             .bind(thread_id.to_string())
             .bind(&item.payload)
@@ -232,11 +234,11 @@ impl QueueStore for RemoteQueueStore {
         limit: usize,
     ) -> ThreadStoreFuture<'_, Vec<QueuedUserSubmissionRecord>> {
         Box::pin(async move {
-            let rows = sqlx::query(&format!(
+            let rows = sqlx::query(AssertSqlSafe(format!(
                 "SELECT id, thread_id, payload_json FROM {}
                  WHERE thread_id = ? ORDER BY queue_order LIMIT ? OFFSET ?",
                 self.table("queued_items")?
-            ))
+            )))
             .bind(thread_id.to_string())
             .bind(i64::try_from(limit).map_err(internal)?)
             .bind(i64::try_from(offset).map_err(internal)?)
@@ -257,10 +259,10 @@ impl QueueStore for RemoteQueueStore {
             let pool = self.pool().await?;
             let mut transaction = pool.begin().await.map_err(internal)?;
             self.lock_thread(&mut transaction, thread_id).await?;
-            let exists: Option<String> = sqlx::query_scalar(&format!(
+            let exists: Option<String> = sqlx::query_scalar(AssertSqlSafe(format!(
                 "SELECT id FROM {} WHERE thread_id = ? AND id = ?",
                 self.table("queued_items")?
-            ))
+            )))
             .bind(thread_id.to_string())
             .bind(&item_id)
             .fetch_optional(transaction.as_mut())
@@ -270,11 +272,11 @@ impl QueueStore for RemoteQueueStore {
                 transaction.commit().await.map_err(internal)?;
                 return Ok(None);
             }
-            sqlx::query(&format!(
+            sqlx::query(AssertSqlSafe(format!(
                 "UPDATE {} SET payload_json = ?, updated_at_ms = ?
                  WHERE thread_id = ? AND id = ?",
                 self.table("queued_items")?
-            ))
+            )))
             .bind(&payload)
             .bind(chrono::Utc::now().timestamp_millis())
             .bind(thread_id.to_string())
@@ -297,10 +299,10 @@ impl QueueStore for RemoteQueueStore {
             let pool = self.pool().await?;
             let mut transaction = pool.begin().await.map_err(internal)?;
             self.lock_thread(&mut transaction, thread_id).await?;
-            let deleted = sqlx::query(&format!(
+            let deleted = sqlx::query(AssertSqlSafe(format!(
                 "DELETE FROM {} WHERE thread_id = ? AND id = ?",
                 self.table("queued_items")?
-            ))
+            )))
             .bind(thread_id.to_string())
             .bind(item_id)
             .execute(transaction.as_mut())
@@ -321,11 +323,11 @@ impl QueueStore for RemoteQueueStore {
             let pool = self.pool().await?;
             let mut transaction = pool.begin().await.map_err(internal)?;
             self.lock_thread(&mut transaction, thread_id).await?;
-            let existing: Vec<(String, i64)> = sqlx::query_as(&format!(
+            let existing: Vec<(String, i64)> = sqlx::query_as(AssertSqlSafe(format!(
                 "SELECT id, queue_order FROM {}
                  WHERE thread_id = ? ORDER BY queue_order",
                 self.table("queued_items")?
-            ))
+            )))
             .bind(thread_id.to_string())
             .fetch_all(transaction.as_mut())
             .await
@@ -347,11 +349,11 @@ impl QueueStore for RemoteQueueStore {
             let maximum_order = existing.last().map_or(-1, |(_, order)| *order);
             let now_ms = chrono::Utc::now().timestamp_millis();
             for (index, item_id) in item_ids.iter().enumerate() {
-                sqlx::query(&format!(
+                sqlx::query(AssertSqlSafe(format!(
                     "UPDATE {} SET queue_order = ?, updated_at_ms = ?
                      WHERE thread_id = ? AND id = ?",
                     self.table("queued_items")?
-                ))
+                )))
                 .bind(maximum_order + i64::try_from(index).map_err(internal)? + 1)
                 .bind(now_ms)
                 .bind(thread_id.to_string())
@@ -367,20 +369,6 @@ impl QueueStore for RemoteQueueStore {
             Ok(())
         })
     }
-}
-
-fn quoted_database(database: &str) -> Result<String, ThreadStoreError> {
-    if database.is_empty()
-        || !database
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
-    {
-        return Err(ThreadStoreError::InvalidRequest {
-            message: "MySQL database must contain only letters, digits, and underscores"
-                .to_string(),
-        });
-    }
-    Ok(format!("`{database}`"))
 }
 
 fn queue_schema(database: &str) -> [String; 4] {
@@ -456,9 +444,63 @@ mod tests {
         );
     }
 
+    // Runs only when CODEX_REMOTE_TEST_MYSQL_URL points at a disposable server.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn queue_round_trip_against_mysql() {
+        let Some(mysql_url) = std::env::var("CODEX_REMOTE_TEST_MYSQL_URL")
+            .ok()
+            .filter(|value| !value.is_empty())
+        else {
+            eprintln!("skipping remote queue test; set CODEX_REMOTE_TEST_MYSQL_URL");
+            return;
+        };
+        let store = RemoteQueueStore::new(RemoteQueueStoreConfig {
+            mysql_url,
+            mysql_database: format!("codex_queue_test_{}", Uuid::now_v7().simple()),
+        });
+        let thread_id = ThreadId::new();
+        let start = store.change_version().await.expect("version");
+
+        let first = store
+            .enqueue(thread_id, "first".to_string())
+            .await
+            .expect("enqueue first");
+        let second = store
+            .enqueue(thread_id, "second".to_string())
+            .await
+            .expect("enqueue second");
+        store
+            .reorder(thread_id, vec![second.id.clone(), first.id.clone()])
+            .await
+            .expect("reorder");
+        store
+            .update(thread_id, first.id.clone(), "first edited".to_string())
+            .await
+            .expect("update")
+            .expect("item exists");
+
+        let payloads = store
+            .list_page(thread_id, /*offset*/ 0, /*limit*/ 10)
+            .await
+            .expect("list")
+            .into_iter()
+            .map(|item| item.payload)
+            .collect::<Vec<_>>();
+        assert_eq!(payloads, vec!["second", "first edited"]);
+        assert!(store.delete(thread_id, second.id).await.expect("delete"));
+
+        let changes = store
+            .changes_since(start, &[thread_id])
+            .await
+            .expect("changes");
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].0, thread_id);
+        assert_eq!(changes[0].1, store.change_version().await.expect("version"));
+    }
+
     #[test]
     fn database_identifiers_are_quoted_and_validated() {
-        assert_eq!("`remote_queue`", quoted_database("remote_queue").unwrap());
-        assert!(quoted_database("remote-queue").is_err());
+        assert_eq!("`remote_queue`", quoted_identifier("remote_queue").unwrap());
+        assert!(quoted_identifier("remote-queue").is_err());
     }
 }

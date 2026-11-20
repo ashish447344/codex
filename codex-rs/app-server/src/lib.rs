@@ -676,10 +676,14 @@ pub async fn run_main_with_transport_options(
     // Remote mode owns persistence in MongoDB/MySQL/Redis. Do not even open
     // the local SQLite runtime: creating it would violate the remote store's
     // no-local-persistence contract before a thread is started.
-    let state_db = if matches!(
-        &config.experimental_thread_store,
-        codex_core::config::ThreadStoreConfig::Remote(_)
-    ) {
+    let state_db = if let codex_core::config::ThreadStoreConfig::Remote(remote) =
+        &config.experimental_thread_store
+    {
+        // Fail at startup, with a readable error, when a connection variable is
+        // missing or a database/namespace name is invalid.
+        codex_core::resolve_remote_thread_store_config(remote).map_err(|err| {
+            std::io::Error::other(format!("invalid remote thread-store configuration: {err}"))
+        })?;
         None
     } else {
         let state_db_init = match init_sqlite_state_db_with_fresh_start_on_corruption(&config).await

@@ -86,11 +86,12 @@ class RemoteThreadStoreConfig:
     Redis owns distributed writer leases.
     """
 
-    mongo_url: str
+    # URLs usually embed credentials, so they are kept out of repr() and logs.
+    mongo_url: str = field(repr=False)
     mongo_database: str
-    mysql_url: str
+    mysql_url: str = field(repr=False)
     mysql_database: str
-    redis_url: str
+    redis_url: str = field(repr=False)
     redis_namespace: str = "codex"
     redis_acquire_timeout_ms: int = 30_000
     redis_lease_ttl_ms: int = 120_000
@@ -104,10 +105,8 @@ class RemoteThreadStoreConfig:
             f"experimental_thread_store.mysql.database = {json.dumps(self.mysql_database)}",
             'experimental_thread_store.redis.url_env = "CODEX_REMOTE_REDIS_URL"',
             f"experimental_thread_store.redis.namespace = {json.dumps(self.redis_namespace)}",
-            "experimental_thread_store.redis.acquire_timeout_ms = "
-            f"{self.redis_acquire_timeout_ms}",
-            "experimental_thread_store.redis.lease_ttl_ms = "
-            f"{self.redis_lease_ttl_ms}",
+            f"experimental_thread_store.redis.acquire_timeout_ms = {self.redis_acquire_timeout_ms}",
+            f"experimental_thread_store.redis.lease_ttl_ms = {self.redis_lease_ttl_ms}",
         )
 
     def environment(self) -> dict[str, str]:

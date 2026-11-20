@@ -192,6 +192,7 @@ pub use thread_manager::build_startup_models;
 pub use thread_manager::local_agent_graph_store_from_state_db;
 pub use thread_manager::passthrough_image_store;
 pub use thread_store_builder::ThreadStoreBuilder;
+pub use thread_store_builder::resolve_remote_thread_store_config;
 pub use tools::MULTI_AGENT_V2_NAMESPACE_DESCRIPTION;
 pub use tools::handlers::WaitForEnvironmentToolConfig;
 pub use web_search::web_search_action_detail;

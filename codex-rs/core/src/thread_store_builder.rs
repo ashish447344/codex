@@ -2,6 +2,7 @@
 //! Host cleanup runs under the store's existing deletion locks.
 
 use crate::config::Config;
+use crate::config::RemoteThreadStoreConfig as RemoteThreadStoreToml;
 use crate::config::ThreadStoreConfig;
 use codex_features::Feature;
 use codex_protocol::ThreadId;
@@ -13,8 +14,26 @@ use codex_thread_store::RemoteThreadStore;
 use codex_thread_store::RemoteThreadStoreConfig;
 use codex_thread_store::ThreadStore;
 use codex_thread_store::ThreadStoreFuture;
+use codex_thread_store::ThreadStoreResult;
 use std::sync::Arc;
 use tracing::warn;
+
+/// Resolves a remote thread-store configuration, reading connection URLs from
+/// the environment variables it names.
+pub fn resolve_remote_thread_store_config(
+    remote: &RemoteThreadStoreToml,
+) -> ThreadStoreResult<RemoteThreadStoreConfig> {
+    RemoteThreadStoreConfig::from_environment(
+        &remote.mongo.url_env,
+        remote.mongo.database.clone(),
+        &remote.mysql.url_env,
+        remote.mysql.database.clone(),
+        &remote.redis.url_env,
+        remote.redis.namespace.clone(),
+        remote.redis.acquire_timeout_ms,
+        remote.redis.lease_ttl_ms,
+    )
+}
 
 type AdditionalCleanup = dyn Fn(Vec<ThreadId>) -> ThreadStoreFuture<'static, ()> + Send + Sync;
 
@@ -106,21 +125,12 @@ impl<'config> ThreadStoreBuilder<'config> {
                 Arc::new(InMemoryThreadStore::for_id(id).with_state_db(state_db))
             }
             ThreadStoreConfig::Remote(remote) => {
-                assert!(
-                    state_db.is_none(),
-                    "remote thread store must not be constructed with local SQLite state"
-                );
-                let config = RemoteThreadStoreConfig::from_environment(
-                    &remote.mongo.url_env,
-                    remote.mongo.database.clone(),
-                    &remote.mysql.url_env,
-                    remote.mysql.database.clone(),
-                    &remote.redis.url_env,
-                    remote.redis.namespace.clone(),
-                    remote.redis.acquire_timeout_ms,
-                    remote.redis.lease_ttl_ms,
-                )
-                .unwrap_or_else(|error| {
+                if state_db.is_some() {
+                    warn!("remote thread store ignores the local SQLite state database");
+                }
+                // `build` is infallible; hosts call `resolve_remote_thread_store_config`
+                // at startup so a bad configuration fails before reaching this point.
+                let config = resolve_remote_thread_store_config(remote).unwrap_or_else(|error| {
                     panic!("invalid remote thread-store configuration: {error}")
                 });
                 Arc::new(RemoteThreadStore::new(config))

@@ -4569,6 +4569,77 @@
       ],
       "type": "object"
     },
+    "RemoteMongoToml": {
+      "additionalProperties": false,
+      "description": "MongoDB settings for the remote thread store.",
+      "properties": {
+        "database": {
+          "description": "Database used for append-only rollout documents and document-oriented runtime state.",
+          "type": "string"
+        },
+        "url_env": {
+          "description": "Name of the environment variable containing the MongoDB connection URI.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "database",
+        "url_env"
+      ],
+      "type": "object"
+    },
+    "RemoteMysqlToml": {
+      "additionalProperties": false,
+      "description": "MySQL or MariaDB settings for the remote thread store.",
+      "properties": {
+        "database": {
+          "description": "Database used for relational app-server state.",
+          "type": "string"
+        },
+        "url_env": {
+          "description": "Name of the environment variable containing the MySQL/MariaDB connection URI.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "database",
+        "url_env"
+      ],
+      "type": "object"
+    },
+    "RemoteRedisToml": {
+      "additionalProperties": false,
+      "description": "Redis settings for remote writer ownership and distributed coordination.",
+      "properties": {
+        "acquire_timeout_ms": {
+          "default": 30000,
+          "description": "Maximum time to wait for a contended thread-writer lease.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "lease_ttl_ms": {
+          "default": 120000,
+          "description": "Lease duration. Implementations renew ownership before this duration expires.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "namespace": {
+          "description": "Prefix applied to every Redis key owned by this deployment.",
+          "type": "string"
+        },
+        "url_env": {
+          "description": "Name of the environment variable containing the Redis connection URI.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "url_env"
+      ],
+      "type": "object"
+    },
     "ResumeCwdMode": {
       "description": "Working directory to use when resuming or forking a session.",
       "oneOf": [
@@ -4907,6 +4978,33 @@
             }
           },
           "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Persist thread and app-server state in MongoDB, MySQL/MariaDB, and Redis.\n\nSecrets are deliberately referenced by environment-variable name instead of stored in `config.toml`. Hosts such as the Python SDK can pass those variables only to the spawned app-server process.",
+          "properties": {
+            "mongo": {
+              "$ref": "#/definitions/RemoteMongoToml"
+            },
+            "mysql": {
+              "$ref": "#/definitions/RemoteMysqlToml"
+            },
+            "redis": {
+              "$ref": "#/definitions/RemoteRedisToml"
+            },
+            "type": {
+              "enum": [
+                "remote"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "mongo",
+            "mysql",
+            "redis",
             "type"
           ],
           "type": "object"
