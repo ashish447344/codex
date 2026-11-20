@@ -1331,6 +1331,34 @@ def test_runtime_can_use_exact_environment(monkeypatch: pytest.MonkeyPatch) -> N
     assert inherited["OPENAI_API_KEY"] == "unselected-provider-secret"
 
 
+def test_remote_thread_store_settings_stay_in_child_environment() -> None:
+    from openai_codex import client as client_module
+
+    remote = client_module.RemoteThreadStoreConfig(
+        mongo_url="mongodb://mongo.example/codex",
+        mongo_database="codex",
+        mysql_url="mysql://mysql.example/codex",
+        mysql_database="codex",
+        redis_url="redis://redis.example/0",
+        redis_namespace="codex:test",
+    )
+    config = client_module.CodexConfig(remote_thread_store=remote, inherit_env=False)
+
+    assert client_module._subprocess_env(config, ()) == remote.environment()
+    assert "example" not in repr(remote)
+    assert remote.config_overrides() == (
+        'experimental_thread_store.type = "remote"',
+        'experimental_thread_store.mongo.url_env = "CODEX_REMOTE_MONGO_URL"',
+        'experimental_thread_store.mongo.database = "codex"',
+        'experimental_thread_store.mysql.url_env = "CODEX_REMOTE_MYSQL_URL"',
+        'experimental_thread_store.mysql.database = "codex"',
+        'experimental_thread_store.redis.url_env = "CODEX_REMOTE_REDIS_URL"',
+        'experimental_thread_store.redis.namespace = "codex:test"',
+        "experimental_thread_store.redis.acquire_timeout_ms = 30000",
+        "experimental_thread_store.redis.lease_ttl_ms = 120000",
+    )
+
+
 def test_runtime_path_dir_preserves_windows_path_key(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

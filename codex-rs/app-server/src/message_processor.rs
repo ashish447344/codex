@@ -101,6 +101,7 @@ use codex_rollout::StateDbHandle;
 use codex_state::log_db::LogDbLayer;
 use codex_thread_store::LocalQueueStore;
 use codex_thread_store::QueueStore;
+use codex_thread_store::RemoteQueueStore;
 use codex_thread_store::ThreadStoreError;
 use tokio::sync::Mutex;
 use tokio::sync::Semaphore;
@@ -341,12 +342,23 @@ impl MessageProcessor {
                 })
             })
             .build();
-        // Queue persistence requires SQLite, so in-memory thread stores and
-        // app servers without a state database do not have a queue backend.
+        // Queue persistence uses the configured thread-store backend. Remote
+        // runtimes must use their shared MySQL database rather than a local fallback.
         let queue_store: Option<Arc<dyn QueueStore>> = match &config.experimental_thread_store {
             ThreadStoreConfig::Local => state_db.as_ref().map(|state_db| {
                 Arc::new(LocalQueueStore::new(Arc::clone(state_db))) as Arc<dyn QueueStore>
             }),
+            ThreadStoreConfig::Remote(remote) => {
+                // `run_main_with_transport_options` already validated this configuration.
+                let remote_config = codex_core::resolve_remote_thread_store_config(remote)
+                    .unwrap_or_else(|error| {
+                        panic!("invalid remote thread-store configuration: {error}")
+                    });
+                Some(
+                    Arc::new(RemoteQueueStore::new(remote_config.queue_store_config()))
+                        as Arc<dyn QueueStore>,
+                )
+            }
             ThreadStoreConfig::InMemory { .. } => None,
         };
         let environment_manager_for_requests = Arc::clone(&environment_manager);

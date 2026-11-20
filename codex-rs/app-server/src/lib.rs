@@ -673,24 +673,39 @@ pub async fn run_main_with_transport_options(
         }
         _ => None,
     };
-    let state_db_init = match init_sqlite_state_db_with_fresh_start_on_corruption(&config).await {
-        Ok(state_db_init) => state_db_init,
-        Err(err) => {
-            return Err(std::io::Error::other(format!(
-                "failed to initialize sqlite state runtime under {}: {err:#}",
-                config.sqlite_config().home().display()
-            )));
+    // Remote mode owns persistence in MongoDB/MySQL/Redis. Do not even open
+    // the local SQLite runtime: creating it would violate the remote store's
+    // no-local-persistence contract before a thread is started.
+    let state_db = if let codex_core::config::ThreadStoreConfig::Remote(remote) =
+        &config.experimental_thread_store
+    {
+        // Fail at startup, with a readable error, when a connection variable is
+        // missing or a database/namespace name is invalid.
+        codex_core::resolve_remote_thread_store_config(remote).map_err(|err| {
+            std::io::Error::other(format!("invalid remote thread-store configuration: {err}"))
+        })?;
+        None
+    } else {
+        let state_db_init = match init_sqlite_state_db_with_fresh_start_on_corruption(&config).await
+        {
+            Ok(state_db_init) => state_db_init,
+            Err(err) => {
+                return Err(std::io::Error::other(format!(
+                    "failed to initialize sqlite state runtime under {}: {err:#}",
+                    config.sqlite_config().home().display()
+                )));
+            }
+        };
+        if let Some(recovery_notice) = state_db_init.recovery_notice {
+            config_warnings.push(ConfigWarningNotification {
+                summary: SQLITE_RECOVERY_CONFIG_WARNING_SUMMARY.to_string(),
+                details: Some(recovery_notice.details),
+                path: None,
+                range: None,
+            });
         }
+        state_db_init.state_db
     };
-    let state_db = state_db_init.state_db;
-    if let Some(recovery_notice) = state_db_init.recovery_notice {
-        config_warnings.push(ConfigWarningNotification {
-            summary: SQLITE_RECOVERY_CONFIG_WARNING_SUMMARY.to_string(),
-            details: Some(recovery_notice.details),
-            path: None,
-            range: None,
-        });
-    }
 
     if let Ok(Some(err)) = check_execpolicy_for_warnings(&config.config_layer_stack).await {
         config_warnings.push(exec_policy_config_warning(&err));

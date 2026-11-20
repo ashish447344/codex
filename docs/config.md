@@ -6,6 +6,12 @@ For advanced configuration instructions, see [this documentation](https://develo
 
 For a full configuration reference, see [this documentation](https://developers.openai.com/codex/config-reference).
 
+## Remote thread store
+
+For shared MongoDB, MySQL/MariaDB, and Redis persistence, including the
+FastAPI/Python SDK handoff and provisioned resources, see
+[Remote thread store](remote-thread-store.md).
+
 ## Lifecycle hooks
 
 Admins can set top-level `allow_managed_hooks_only = true` in

@@ -72,6 +72,7 @@ async fn guardian_history_survives_restart_and_user_fork(
     let server = start_mock_server().await;
     let pathless_store = match &store_config {
         ThreadStoreConfig::Local => None,
+        ThreadStoreConfig::Remote(_) => None,
         ThreadStoreConfig::InMemory { id } => Some(InMemoryThreadStore::for_id(id)),
     };
     let mut builder = test_codex()
